@@ -3,137 +3,221 @@
 ## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        main.py (orchestrator)               │
-│                                                             │
-│   ┌──────────────┐    ┌──────────────┐    ┌─────────────┐  │
-│   │    Monitor   │───▶│    Session   │◀───│    Coach    │  │
-│   │  (activity)  │    │    (state)   │    │  (Claude)   │  │
-│   └──────────────┘    └──────────────┘    └──────┬──────┘  │
-│                                                   │         │
-│   ┌──────────────┐                       ┌────────▼──────┐  │
-│   │ Voice Input  │──────────────────────▶│ Voice Output  │  │
-│   │  (Whisper)   │                       │  (edge-tts)   │  │
-│   └──────────────┘                       └───────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          main.py (orchestrator)                     │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                     Pipecat Pipeline                        │   │
+│  │                                                             │   │
+│  │  ┌───────────┐    ┌───────────┐    ┌────────────────────┐  │   │
+│  │  │  Whisper  │───▶│  Claude  │───▶│  ElevenLabs Turbo  │  │   │
+│  │  │  STT      │    │  (Brain) │    │  TTS (streaming)   │  │   │
+│  │  │  + VAD    │    │          │    │                    │  │   │
+│  │  └───────────┘    └────┬─────┘    └────────────────────┘  │   │
+│  │                        │ tool calls                        │   │
+│  └────────────────────────┼──────────────────────────────────┘   │
+│                           │                                        │
+│         ┌─────────────────┼──────────────────┐                    │
+│         ▼                 ▼                  ▼                    │
+│   ┌───────────┐    ┌────────────┐    ┌────────────┐               │
+│   │ Watchdog  │    │  Session   │    │ MemPalace  │               │
+│   │ (pywin32) │───▶│  (state)   │    │ (memory)   │               │
+│   └───────────┘    └────────────┘    └────────────┘               │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Activity Detection
+## The Streaming Pipeline
 
-This is the core sensing problem: how do we know what the user is doing without using a camera or screenshot analysis?
+The core voice loop uses **Pipecat** as the orchestrator. Every stage overlaps — TTS begins
+speaking before Claude has finished generating, which brings Time-to-First-Audio to
+roughly 1.5–3 seconds on CPU (VAD finalization + Whisper inference + Claude first token +
+ElevenLabs first audio chunk).
 
-### Option A — Active Window Title + Process Name
-Read the currently focused window's title and executable name using the Windows accessibility API (`pywin32`).
-
-- **Examples:** `chrome.exe / "YouTube - lofi beats"`, `notion.exe / "Calculus Notes"`, `discord.exe / "general"`
-- **Pros:** Zero privacy concern, very fast, no API cost, works for all apps
-- **Cons:** Title alone is sometimes vague (e.g. a Chrome tab titled "New Tab")
-
-### Option B — Browser Active Tab URL
-For Chrome and Edge, the current URL can be read via the Windows UI Automation API or by querying the browser's accessibility tree.
-
-- **Examples:** `https://youtube.com/watch?v=...`, `https://khanacademy.org/...`
-- **Pros:** Dramatically more precise for browser-based distractions and study tools
-- **Cons:** Only works for Chromium browsers; requires extra plumbing; some sites obfuscate titles
-
-### Option C — Idle Detection
-Track keyboard and mouse activity to detect if the user is active at all (using `pywin32` `GetLastInputInfo`).
-
-- **Pros:** Simple signal — if no input for 5 mins, user probably left the desk
-- **Cons:** Tells you nothing about *what* they're doing, only *whether* they're there
-
-### Recommendation: A + B + C together
-
-Use all three as a combined signal:
-1. **Always** capture process + window title (Option A) — the baseline
-2. **If the active process is a browser**, also attempt to read the URL (Option B)
-3. **Track idle time** (Option C) — if idle, pause off-task timer (user is away, not distracted)
-
-This gives the coach a rich, structured snapshot each tick:
 ```
+User speaks
+    │
+    ▼
+[Silero VAD] — detects end of speech (~500ms silence)
+    │
+    ▼
+[faster-whisper] — local transcription (runs in thread pool, not event loop)
+    │
+    ▼
+[Pipecat] — routes text into Claude, manages barge-in
+    │
+    ▼
+[Claude] — streams tokens word-by-word
+    │
+    ▼
+[ElevenLabs Turbo] — converts streaming tokens to audio chunks as they arrive
+    │
+    ▼
+Speaker output (user hears coach almost immediately)
+```
+
+**Barge-in:** If the user speaks while the coach is talking, Pipecat kills the TTS stream
+and immediately routes the new speech through the pipeline. The coach stops mid-sentence.
+
+---
+
+## Activity Detection (The Watchdog)
+
+A lightweight background thread — separate from the Pipecat pipeline — polls the active
+window every 30 seconds using `pywin32`.
+
+### What it captures
+
+```python
 {
   process: "chrome.exe",
   window_title: "YouTube - lofi hip hop",
-  url: "https://www.youtube.com/watch?v=jfKfPfyJRdk",  // if available
+  url: "https://www.youtube.com/watch?v=...",  # if browser, via UI Automation
   idle_seconds: 3
 }
 ```
 
----
+### Three combined signals
 
-## Components
+**Option A — Active window title + process name**
+Always captured. Works for all apps. Sometimes vague (e.g. "New Tab").
 
-### monitor.py — Activity Monitor
-- Runs on a timer (default: every 20 seconds)
-- Captures: active process, window title, browser URL (if applicable), idle time
-- Appends a `WindowSnapshot` to the session history
-- Emits an event when a new snapshot is ready
+**Option B — Browser active tab URL**
+Attempted when active process is a Chromium browser. Dramatically more precise.
+Fragile: may break across browser updates. Always has a fallback to window title.
 
-### session.py — Session State
-- Holds the user's study plan, session start time
-- Tracks rolling snapshot history (last N entries)
-- Tracks how long the user has been continuously off-task
-- Tracks when the coach last spoke (for cooldown enforcement)
+**Option C — Idle detection**
+`GetLastInputInfo` tracks keyboard/mouse activity. If idle > 3 minutes, pause the
+off-task timer — user has stepped away, not distracted.
 
-### coach.py — AI Coach (Claude)
-- Receives the study plan + recent activity history
-- Sends a structured prompt to Claude asking two things:
-  1. Is the user currently on-task or off-task? Why?
-  2. If the coach should speak — what should it say, given the chosen persona?
-- Claude's response drives the intervention decision
-- API calls only happen when the off-task threshold is crossed (not on every tick)
+### Intervention flow
 
-### voice_input.py — Speech-to-Text
-- Runs `faster-whisper` locally in a background thread
-- Ambient listening — detects speech automatically using VAD (voice activity detection)
-- Transcribes the user's response and passes it to the coach for a reply
+When the watchdog detects off-task behaviour beyond the threshold, it **injects a system
+message directly into the Pipecat pipeline**:
 
-### voice_output.py — Text-to-Speech
-- Uses `elevenlabs` Python SDK (high-quality neural voices)
-- Streams audio for low latency (~200–400ms to first audio)
-- Queues speech so multiple messages don't overlap
-- Mutes the microphone while speaking to prevent echo (coach's voice being transcribed as user input)
-- Requires internet + `ELEVENLABS_API_KEY`
-- Free tier: 10,000 characters/month — sufficient for light use, may need paid plan for heavy daily use
+```
+[SYSTEM]: User has been on YouTube for 2 minutes. Study plan: revising calculus.
+Persona: Drill Sergeant. Intervene now.
+```
 
-### main.py — Orchestrator
-- Handles session setup (ask for plan, choose persona)
-- Starts the monitor loop and voice listener as async tasks
-- Connects events: new snapshot → coach evaluation → optional intervention
+Claude receives this as a pipeline input and triggers TTS immediately — the coach speaks
+without the user saying anything.
 
 ---
 
-## Data Flow
+## Memory System (MemPalace)
+
+**MemPalace** (`pip install mempalace`) is a local-first long-term memory system for AI
+agents. It stores verbatim conversation history and retrieves relevant context via semantic
+search. No cloud storage — everything stays on the machine.
+
+### Spatial hierarchy
 
 ```
-1. User sets plan ("revise calculus, 90 mins") via voice or text
-2. Monitor ticks every 20s → captures WindowSnapshot → appends to session
-3. Session checks: has user been off-task for > threshold?
-   - YES + cooldown elapsed → trigger coach
-   - NO → do nothing
-4. Coach sends to Claude: plan + last 5 snapshots + persona
-5. Claude returns: { on_task, reasoning, message }
-6. If intervention: voice_output speaks the message
-7. Voice input detects user reply → coach sends follow-up to Claude → voice_output responds
+Wing: Calculus          ← one per subject / study domain
+  Room: Integrals       ← one per specific topic
+  Room: Derivatives
+Wing: Biology
+  Room: Cell division
 ```
+
+### Session wake-up
+
+At the start of each session, the app runs a wake-up query against the relevant wing to
+pull historical context into Claude's system prompt:
+
+```
+mempalace wake-up --wing calculus
+```
+
+This gives Claude facts like: "User struggles with integration by parts at the 40-minute
+mark. Responds better to encouragement than pressure on this topic."
+
+### What gets stored
+
+- The user's exact words (verbatim, not summarised)
+- Coach interventions and the user's responses to them
+- Session outcomes ("studied 62 minutes, drifted 3 times")
+- Persona preferences per subject
+
+---
+
+## Tool Calling
+
+Claude uses **function calling** to perform actions during conversation. This is cleaner
+than parsing intent from free text and directly handles many session management needs.
+
+| User says | Claude calls | Python does |
+|---|---|---|
+| "I'm taking 5 minutes" | `set_break(minutes=5)` | Pauses watchdog, starts countdown, alerts when done |
+| "Be less harsh" | `change_persona("friend")` | Updates system prompt for next turn |
+| "Start biology session" | `load_wing("biology")` | Runs MemPalace wake-up for Biology wing |
+| "What have I been doing?" | `get_session_summary()` | Returns session stats from state |
+| "Update my plan — doing essays now" | `update_plan("essay writing")` | Updates session plan, resets on-task classification |
+
+---
+
+## Session State
+
+Tracked in `session.py`, passed to the Pipecat pipeline and watchdog:
+
+- Study plan (mutable mid-session via tool call)
+- Chosen persona (mutable via tool call)
+- Rolling window snapshot history (last 20 entries)
+- Off-task streak duration + timestamp
+- Last intervention timestamp (cooldown enforcement)
+- Continuous on-task duration (for positive reinforcement)
+- Conversation history (passed to Claude as context each turn)
+- Distraction count (for escalation logic — coach gets firmer after repeated offences)
+
+---
+
+## Coach Intelligence
+
+**Classification strategy (two-tier to control API cost):**
+
+1. **Fast local heuristics** — obvious cases classified without calling Claude:
+   - Known distractions: `youtube.com`, `netflix.com`, `instagram.com`, `reddit.com`, games
+   - Known study tools: `khanacademy.org`, `notion.so`, PDF viewers, IDEs
+2. **Claude for ambiguous cases** — anything not in the heuristic lists:
+   - `discord.com` (study group or chat?)
+   - `youtube.com/watch?v=...` with an educational title
+   - `google.com` (researching or procrastinating?)
+
+**Escalation:** Distraction count tracked per session. Each repeated offence unlocks a
+firmer intervention tier. After 5 distractions, the coach shifts to a reflective mode:
+"You've drifted five times — something seems off. What's going on?"
+
+**Positive reinforcement:** After a configurable focus streak (default: 25 minutes
+uninterrupted), the coach gives brief encouragement unprompted.
 
 ---
 
 ## Key Design Decisions
 
-**Why no screenshots?**
-Simpler, faster, cheaper (no vision API cost per tick), and better for privacy. Window titles + URLs are sufficient to distinguish "reading a textbook PDF" from "watching YouTube".
-
-**Why Claude for the coaching decision, not just rule-based logic?**
-Rule-based logic ("if youtube.com → off task") is brittle. Claude can understand nuance: a YouTube video about the topic you're studying might be on-task. A Discord message to a study group might be fine. Context matters.
+**Why Pipecat?**
+It handles the hardest parts of voice pipelines — streaming, barge-in, pipeline
+orchestration — without custom plumbing. Using it means we don't reinvent a voice framework.
 
 **Why faster-whisper locally?**
-Voice input needs to work without internet and without latency. A local Whisper model on CPU is good enough for conversational speech. Use `base` model as default — 74MB, ~200MB RAM, transcribes short phrases in 0.5–2 seconds on CPU. Must run in a thread pool executor, not the asyncio event loop, to avoid blocking the monitor tick.
+STT runs offline for privacy. Local Whisper means ambient listening doesn't send audio to
+any cloud service. Use `base` model (74MB, ~200MB RAM) as default — transcribes short
+phrases in 0.5–2s on CPU. Must run in a thread pool executor, not the asyncio event loop.
 
 **Why ElevenLabs for TTS?**
-Voice quality matters significantly for a coaching persona — a natural-sounding voice is more engaging and less annoying over long sessions. ElevenLabs produces noticeably more human speech than alternatives. Streams audio for low latency. Requires internet and an API key (free tier: 10,000 chars/month).
+Voice quality matters for a coaching persona people will hear for hours. ElevenLabs Turbo
+supports streaming, so audio begins playing before the full response is generated. Requires
+internet + `ELEVENLABS_API_KEY`. Free tier: 10,000 chars/month.
+
+**Why MemPalace over a simple conversation log?**
+A flat log grows unbounded and doesn't support semantic retrieval. MemPalace lets the coach
+pull *relevant* history efficiently — what happened last Tuesday in calculus, not the entire
+session archive. Verbatim storage means nothing is lost to summarisation.
+
+**Why Claude for coaching, not rule-based logic?**
+Rules are brittle. Claude can understand that a YouTube video titled "3Blue1Brown — Calculus
+Explained" might be on-task. Context matters, and rules can't encode it.
 
 ---
 
@@ -141,12 +225,14 @@ Voice quality matters significantly for a coaching persona — a natural-soundin
 
 | Concern | Library | Notes |
 |---|---|---|
+| Voice pipeline | `pipecat` | Orchestrates STT → LLM → TTS, handles barge-in |
 | Active window | `pywin32` | Windows only |
-| Browser URL | `pywin32` UI Automation | Chromium browsers |
+| Browser URL | `pywin32` UI Automation | Chromium browsers, fragile — fallback to title |
 | Idle detection | `pywin32` `GetLastInputInfo` | |
-| AI coaching | `anthropic` SDK | Claude Sonnet |
-| STT | `faster-whisper` | Local, CPU-capable |
-| TTS | `elevenlabs` | Streaming, API key required, 10k chars/month free |
+| STT | `faster-whisper` + Silero VAD | Local, CPU-capable, thread pool executor |
+| AI coaching | `anthropic` SDK | Claude Sonnet (latest) |
+| TTS | `elevenlabs` (Turbo) | Streaming, API key required |
+| Long-term memory | `mempalace` | Local, ChromaDB + SQLite, verbatim storage |
 | Audio playback | `pygame` | Cross-platform |
-| Async runtime | `asyncio` | Concurrent monitor + voice |
-| Config | `python-dotenv` | API key from .env |
+| Async runtime | `asyncio` | Concurrent watchdog + pipeline |
+| Config | `python-dotenv` | API keys from .env |

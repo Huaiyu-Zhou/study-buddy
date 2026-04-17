@@ -36,17 +36,33 @@ Someone studying alone — student, self-learner, professional — who wants an 
 - The coach decides autonomously when to intervene — the user does not trigger it
 - Interventions are triggered when the system detects the user has been off-task beyond a configurable threshold
 - The coach does not nag constantly — there is a cooldown between interventions
+- The coach escalates in firmness after repeated distractions within a session
 - The coach can also give positive reinforcement when the user is doing well (e.g. "You've been focused for 40 minutes, solid work")
+- Users can speak to the coach proactively at any time — not just in response to interventions
 
 ### 4. Voice In / Voice Out
-- The coach speaks aloud using text-to-speech
-- The user can speak back naturally — the system listens ambiently
+- The coach speaks aloud using text-to-speech (ElevenLabs Turbo, streaming)
+- The user can speak back naturally — the system listens ambiently via Silero VAD
 - No push-to-talk required; the system detects when the user is speaking
+- Barge-in supported: speaking while the coach is talking immediately interrupts it
+- STT (faster-whisper) runs locally — ambient audio never leaves the machine
 
 ### 5. Configurable Persona & Tone
 - Users choose the coach's personality at session start (or in settings)
 - Examples: strict drill sergeant, encouraging friend, calm Zen mentor, competitive peer
 - Persona affects both the language used and how aggressively it intervenes
+- Persona can be changed mid-session by voice ("be less harsh")
+
+### 6. Long-Term Memory
+- The coach remembers across sessions using MemPalace (local, no cloud)
+- Memory is organised by subject (Wing) and topic (Room)
+- At session start, relevant history is loaded into the coach's context
+- The coach can reference past struggles, patterns, and wins without being told
+- Verbatim storage — nothing is lost to summarisation
+
+### 7. Session Summary
+- At session end, the coach delivers a spoken summary: time studied, distractions, longest focus streak
+- Summary is also written to local storage for MemPalace to reference in future sessions
 
 ---
 

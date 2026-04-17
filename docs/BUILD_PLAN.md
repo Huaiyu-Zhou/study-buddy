@@ -1,6 +1,6 @@
 # Build Plan — AI Study Buddy
 
-Ordered by dependency. Each phase produces something runnable so we can test before moving on.
+Ordered by dependency. Each phase produces something runnable before moving on.
 
 ---
 
@@ -8,99 +8,115 @@ Ordered by dependency. Each phase produces something runnable so we can test bef
 *Goal: project skeleton, config, dependencies installed and importable*
 
 - [ ] `requirements.txt` — pin all dependencies
-- [ ] `.env.example` — document required environment variables (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`)
-- [ ] `config.py` — central settings (intervals, thresholds, model, voice)
-- [ ] `session.py` — session state dataclass (plan, snapshot history, off-task timer, last intervention)
+- [ ] `.env.example` — `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`
+- [ ] `config.py` — intervals, thresholds, model names, voice ID, Whisper model size
+- [ ] `session.py` — session state: plan, persona, snapshot history, off-task timer, distraction count, conversation history, focus streak
 
 **Done when:** `python -c "from session import Session; print(Session())"` works
 
 ---
 
-## Phase 2 — Activity Monitor
+## Phase 2 — Activity Watchdog
 *Goal: the system can watch what the user is doing*
 
-- [ ] `monitor.py` — capture active process + window title (`pywin32`)
-- [ ] `monitor.py` — browser URL extraction for Chrome/Edge (UI Automation)
-- [ ] `monitor.py` — idle time detection (`GetLastInputInfo`)
-- [ ] `monitor.py` — async tick loop that appends `WindowSnapshot` to session
+- [ ] `watchdog.py` — capture active process + window title (`pywin32`)
+- [ ] `watchdog.py` — browser URL extraction for Chrome/Edge (UI Automation, with fallback)
+- [ ] `watchdog.py` — idle time detection (`GetLastInputInfo`)
+- [ ] `watchdog.py` — two-tier classifier: local heuristics first, flag ambiguous cases
+- [ ] `watchdog.py` — async tick loop, appends `WindowSnapshot` to session
 
-**Done when:** running the monitor for 60 seconds prints a readable log of what windows were active
-
----
-
-## Phase 3 — Voice Output
-*Goal: the system can speak before it can listen — easier to test coaching*
-
-- [ ] `voice_output.py` — ElevenLabs SDK wrapper, streaming, queued
-- [ ] `voice_output.py` — audio playback via `pygame`
-- [ ] `voice_output.py` — mic mute/unmute hooks (prevent echo when coach is speaking)
-- [ ] Smoke test: make it say "Your study session is starting. Good luck."
-
-**Done when:** calling `speak("hello")` plays audio through speakers
+**Done when:** running the watchdog for 60 seconds prints a readable log of windows + on/off-task classification
 
 ---
 
-## Phase 4 — AI Coach
-*Goal: Claude evaluates activity and decides whether to intervene*
+## Phase 3 — Pipecat Pipeline (no voice yet)
+*Goal: Pipecat pipeline wired up with Claude, text in / text out*
 
-- [ ] `coach.py` — build the system prompt (plan + persona + recent snapshots)
-- [ ] `coach.py` — call Claude API, parse structured response (`on_task`, `message`)
-- [ ] `coach.py` — intervention logic (off-task threshold + cooldown check)
-- [ ] `coach.py` — persona definitions (drill sergeant, encouraging friend, Zen mentor, competitive peer)
-- [ ] Integration test: feed fake snapshots and verify Claude generates an appropriate message
+- [ ] `pipeline.py` — Pipecat pipeline setup
+- [ ] `pipeline.py` — Claude integration with system prompt (plan + persona + conversation history)
+- [ ] `pipeline.py` — tool call definitions (`set_break`, `change_persona`, `load_wing`, `update_plan`, `get_session_summary`)
+- [ ] `pipeline.py` — watchdog injection: system message → pipeline when off-task threshold crossed
+- [ ] Test: pipe a text message in, get a text response back with tool calls working
 
-**Done when:** feeding 5 "YouTube" snapshots to the coach produces a spoken intervention
+**Done when:** sending "I'm on YouTube" as a fake watchdog event produces a coach text response
+
+---
+
+## Phase 4 — Voice Output
+*Goal: pipeline speaks*
+
+- [ ] Add ElevenLabs Turbo TTS to Pipecat pipeline (streaming)
+- [ ] `voice_output.py` — mic mute/unmute hooks (prevent echo while coach is speaking)
+- [ ] Smoke test: coach says "Your study session is starting. Good luck."
+
+**Done when:** watchdog trigger produces spoken audio through speakers
 
 ---
 
 ## Phase 5 — Voice Input
-*Goal: user can speak back and the coach responds*
+*Goal: user can speak and be heard*
 
-- [ ] `voice_input.py` — load `faster-whisper` (`base` model, ~74MB download on first run)
-- [ ] `voice_input.py` — run Whisper in thread pool executor (not event loop — it's CPU-bound)
-- [ ] `voice_input.py` — VAD loop using silero-vad (built into faster-whisper)
-- [ ] `voice_input.py` — skip transcription while TTS is playing (echo prevention)
-- [ ] `voice_input.py` — transcribe speech, emit text event
-- [ ] `coach.py` — handle user reply: send conversation turn to Claude, speak response
+- [ ] `voice_input.py` — load `faster-whisper` (`base` model, downloaded on first run — warn user)
+- [ ] `voice_input.py` — run Whisper in thread pool executor (not event loop)
+- [ ] `voice_input.py` — Silero VAD loop, skip transcription while TTS is playing
+- [ ] Add STT to Pipecat pipeline
+- [ ] Test barge-in: speak while coach is talking, coach stops
 
-**Done when:** saying "I got distracted, sorry" out loud triggers a spoken coach response
+**Done when:** full voice loop works — speak → transcribe → Claude responds → TTS plays
 
 ---
 
-## Phase 6 — Session Setup Flow
+## Phase 6 — MemPalace Integration
+*Goal: coach has long-term memory across sessions*
+
+- [ ] `memory.py` — MemPalace init, wing/room structure per subject
+- [ ] `memory.py` — wake-up on session start: load relevant history into system prompt
+- [ ] `memory.py` — write session events (interventions, responses, outcomes) at end of session
+- [ ] Wire `load_wing` tool call to MemPalace wake-up
+- [ ] Test: run two sessions on same subject, verify second session coach references first
+
+**Done when:** coach mentions something from a previous session without being told
+
+---
+
+## Phase 7 — Session Setup Flow
 *Goal: structured start-of-session experience*
 
+- [ ] `main.py` — first-run check: Whisper model download, API key validation, mic/speaker test
 - [ ] `main.py` — ask for study plan (voice or typed)
 - [ ] `main.py` — ask for persona choice (voice or typed)
-- [ ] `main.py` — coach confirms plan back to user and starts monitoring
-- [ ] Handle edge cases: no plan given, unclear input
+- [ ] Coach confirms plan and begins monitoring
+- [ ] Handle: vague plan (coach asks for clarification), no plan given
 
-**Done when:** full startup flow works end-to-end from cold launch
-
----
-
-## Phase 7 — Positive Reinforcement
-*Goal: coach also celebrates focus streaks, not just punishes distraction*
-
-- [ ] `session.py` — track continuous on-task duration
-- [ ] `coach.py` — trigger encouragement message after N minutes of focus
-- [ ] Tune message frequency so it doesn't become annoying
+**Done when:** cold launch to active monitoring session works end-to-end
 
 ---
 
-## Phase 8 — Polish & Config
-*Goal: user-tunable settings, graceful shutdown*
+## Phase 8 — Coach Intelligence
+*Goal: nuanced, escalating, context-aware responses*
 
-- [ ] CLI flags or `.env` for: persona, off-task threshold, intervention cooldown, whisper model size
-- [ ] Graceful shutdown on Ctrl+C with session summary ("You studied for 47 minutes, great work")
-- [ ] Error handling: mic not found, API key missing, pywin32 permission errors
+- [ ] Escalation logic: track distraction count, escalate tone after repeated offences
+- [ ] Positive reinforcement: speak up after uninterrupted focus streak (default 25 min)
+- [ ] Ambiguous activity: send to Claude for classification rather than heuristic
+- [ ] "What should I do?" — user-initiated conversation supported at any time
+
+**Done when:** coach behaves differently on 1st vs 4th distraction; celebrates a 25-min focus streak
+
+---
+
+## Phase 9 — Polish & Resilience
+*Goal: handles real-world failure gracefully*
+
+- [ ] Graceful shutdown on Ctrl+C: session summary spoken + written ("62 min studied, 3 distractions")
+- [ ] Error handling: mic not found, API key missing, pywin32 permission errors, ElevenLabs rate limit
+- [ ] CLI flags / `.env` for: persona, off-task threshold, cooldown, Whisper model, ElevenLabs voice ID
 - [ ] `README.md` — setup instructions
 
 ---
 
-## Parking Lot (post-v1 ideas)
-- Session history log (what were you doing, for how long)
-- Multiple study blocks / break scheduling
-- Web UI for config and session review
-- Support for macOS/Linux
+## Parking Lot (post-v1)
+- Session history log + stats dashboard
 - Custom persona builder
+- Support for macOS/Linux
+- Multiple study blocks with break scheduling
+- Browser extension for richer tab context
