@@ -61,7 +61,8 @@ Someone studying alone — student, self-learner, professional — who wants an 
 - Verbatim storage — nothing is lost to summarisation
 
 ### 7. Session Summary
-- At session end, the coach delivers a spoken summary: time studied, distractions, longest focus streak
+- The user ends the session by saying "I'm done" / "end session" (voice command) or pressing Ctrl+C
+- Both paths deliver the same outcome: the coach speaks a summary (time studied, distractions, longest focus streak) then exits
 - Summary is also written to local storage for MemPalace to reference in future sessions
 
 ---

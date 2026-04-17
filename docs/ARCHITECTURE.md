@@ -155,6 +155,18 @@ than parsing intent from free text and directly handles many session management 
 | "Start biology session" | `load_wing("biology")` | Runs MemPalace wake-up for Biology wing |
 | "What have I been doing?" | `get_session_summary()` | Returns session stats from state |
 | "Update my plan — doing essays now" | `update_plan("essay writing")` | Updates session plan, resets on-task classification |
+| "I'm done" / "end session" | `end_session()` | Speaks summary, writes to MemPalace, exits cleanly |
+
+---
+
+## Session End Flow
+
+Two paths to session end — both produce identical outcomes:
+
+- **Voice:** user says "I'm done" / "end session" → Claude calls `end_session()` tool → summary spoken via TTS → session data written to MemPalace → process exits cleanly
+- **Ctrl+C:** signal handler catches SIGINT → same summary + MemPalace write path → process exits cleanly
+
+Neither path requires the user to confirm. The coach speaks the summary regardless of how the session ends.
 
 ---
 
@@ -236,3 +248,13 @@ Explained" might be on-task. Context matters, and rules can't encode it.
 | Audio playback | `pygame` | Cross-platform |
 | Async runtime | `asyncio` | Concurrent watchdog + pipeline |
 | Config | `python-dotenv` | API keys from .env |
+
+---
+
+## Requirements
+
+- **Python:** 3.10+
+- **OS:** Windows 10 or Windows 11 (pywin32 is Windows-only)
+- **Permissions:** pywin32 UI Automation (browser URL extraction) may require running as administrator
+- **API keys:** `ANTHROPIC_API_KEY` (required), `ELEVENLABS_API_KEY` (required for TTS)
+- **Internet:** required for Claude API calls and ElevenLabs TTS; STT runs fully offline

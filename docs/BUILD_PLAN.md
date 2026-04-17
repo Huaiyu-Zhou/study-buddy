@@ -36,9 +36,12 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 - [ ] `pipeline.py` — Claude integration with system prompt (plan + persona + conversation history)
 - [ ] `pipeline.py` — tool call definitions (`set_break`, `change_persona`, `load_wing`, `update_plan`, `get_session_summary`)
 - [ ] `pipeline.py` — watchdog injection: system message → pipeline when off-task threshold crossed
+- [ ] `pipeline.py` — cooldown enforcement: minimum time between interventions (uses `last_intervention_timestamp` from session)
+- [ ] `pipeline.py` — escalation logic: distraction count tracked, tone escalates after repeated offences
+- [ ] `pipeline.py` — positive reinforcement: trigger unprompted encouragement after configurable focus streak (default 25 min)
 - [ ] Test: pipe a text message in, get a text response back with tool calls working
 
-**Done when:** sending "I'm on YouTube" as a fake watchdog event produces a coach text response
+**Done when:** sending "I'm on YouTube" as a fake watchdog event produces a coach text response; sending it 3 times escalates the tone; 25-min focus timer triggers encouragement
 
 ---
 
@@ -92,15 +95,13 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 
 ---
 
-## Phase 8 — Coach Intelligence
-*Goal: nuanced, escalating, context-aware responses*
+## Phase 8 — Ambiguous Activity Classification & User-Initiated Conversation
+*Goal: handle edge cases the heuristics can't — and let the user start conversations*
 
-- [ ] Escalation logic: track distraction count, escalate tone after repeated offences
-- [ ] Positive reinforcement: speak up after uninterrupted focus streak (default 25 min)
-- [ ] Ambiguous activity: send to Claude for classification rather than heuristic
-- [ ] "What should I do?" — user-initiated conversation supported at any time
+- [ ] Ambiguous activity: send window snapshot to Claude for classification (anything not in heuristic lists)
+- [ ] "What should I do?" — user-initiated conversation supported at any time, not just in response to interventions
 
-**Done when:** coach behaves differently on 1st vs 4th distraction; celebrates a 25-min focus streak
+**Done when:** opening `discord.com` triggers a Claude classification call (not a heuristic hit); speaking unprompted mid-session gets a natural coach response
 
 ---
 
