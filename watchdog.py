@@ -1,10 +1,19 @@
 import ctypes
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 
 import psutil
 import win32gui
 import win32process
+
+from config import (
+    KNOWN_DISTRACTION_DOMAINS,
+    KNOWN_STUDY_DOMAINS,
+    KNOWN_DISTRACTION_PROCESSES,
+    KNOWN_STUDY_PROCESSES,
+)
+from session import WindowSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -65,3 +74,27 @@ def get_browser_url(process_name: str) -> Optional[str]:
         return None
     except Exception:
         return None
+
+
+def classify_snapshot(snapshot: WindowSnapshot) -> Optional[bool]:
+    """
+    Classify a window snapshot using local heuristics.
+    Returns True (on-task), False (off-task), or None (ambiguous — caller sends to Claude).
+    URL is checked first — more precise than process name.
+    """
+    if snapshot.url:
+        domain = urlparse(snapshot.url).netloc.lower()
+        if domain.startswith("www."):
+            domain = domain[4:]
+        if any(domain == d or domain.endswith("." + d) for d in KNOWN_DISTRACTION_DOMAINS):
+            return False
+        if any(domain == d or domain.endswith("." + d) for d in KNOWN_STUDY_DOMAINS):
+            return True
+        return None  # URL present but domain unknown — ambiguous
+
+    if snapshot.process in KNOWN_DISTRACTION_PROCESSES:
+        return False
+    if snapshot.process in KNOWN_STUDY_PROCESSES:
+        return True
+
+    return None  # no URL, process unknown — ambiguous

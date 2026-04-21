@@ -55,3 +55,49 @@ def test_get_browser_url_returns_none_on_automation_failure(mocker):
     mocker.patch.dict("sys.modules", {"comtypes": None})
     result = get_browser_url("chrome.exe")
     assert result is None
+
+from datetime import datetime
+from session import WindowSnapshot
+from watchdog import classify_snapshot
+
+def _snap(process="notepad.exe", title="Untitled", url=None, idle=0):
+    return WindowSnapshot(
+        timestamp=datetime.now(),
+        process=process,
+        window_title=title,
+        url=url,
+        idle_seconds=idle,
+        is_on_task=None,
+    )
+
+def test_classify_known_distraction_url_returns_false():
+    snap = _snap(url="https://www.youtube.com/watch?v=abc")
+    assert classify_snapshot(snap) is False
+
+def test_classify_known_study_url_returns_true():
+    snap = _snap(url="https://khanacademy.org/math/calculus")
+    assert classify_snapshot(snap) is True
+
+def test_classify_subdomain_of_distraction_returns_false():
+    snap = _snap(url="https://old.reddit.com/r/learnpython")
+    assert classify_snapshot(snap) is False
+
+def test_classify_ambiguous_url_returns_none():
+    snap = _snap(url="https://discord.com/channels/123/456")
+    assert classify_snapshot(snap) is None
+
+def test_classify_known_distraction_process_no_url_returns_false():
+    snap = _snap(process="steam.exe")
+    assert classify_snapshot(snap) is False
+
+def test_classify_known_study_process_no_url_returns_true():
+    snap = _snap(process="code.exe")
+    assert classify_snapshot(snap) is True
+
+def test_classify_unknown_process_no_url_returns_none():
+    snap = _snap(process="unknownapp.exe")
+    assert classify_snapshot(snap) is None
+
+def test_classify_url_takes_precedence_over_process():
+    snap = _snap(process="code.exe", url="https://youtube.com/watch?v=xyz")
+    assert classify_snapshot(snap) is False
