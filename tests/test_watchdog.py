@@ -101,3 +101,81 @@ def test_classify_unknown_process_no_url_returns_none():
 def test_classify_url_takes_precedence_over_process():
     snap = _snap(process="code.exe", url="https://youtube.com/watch?v=xyz")
     assert classify_snapshot(snap) is False
+
+import asyncio
+from unittest.mock import AsyncMock
+from watchdog import watchdog_loop
+from session import Session
+
+
+async def _yield_once(*_args, **_kwargs):
+    """Replacement for _sleep in tests: yields to event loop once then returns."""
+    await asyncio.sleep(0)
+
+
+async def _run_one_tick(loop_coro, mocker):
+    """Start watchdog_loop, let it run one tick, cancel it."""
+    task = asyncio.create_task(loop_coro)
+    await asyncio.sleep(0.05)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+async def test_watchdog_loop_calls_on_off_task_when_off_task(mocker):
+    session = Session(plan="calculus revision")
+    on_off_task = AsyncMock()
+
+    mocker.patch("watchdog.get_active_window_info", return_value=("chrome.exe", "YouTube"))
+    mocker.patch("watchdog.get_idle_seconds", return_value=0)
+    mocker.patch("watchdog.get_browser_url", return_value="https://youtube.com/watch?v=abc")
+    mocker.patch("watchdog._sleep", new=_yield_once)
+
+    await _run_one_tick(watchdog_loop(session, on_off_task), mocker)
+
+    assert on_off_task.called
+    snapshot_arg = on_off_task.call_args[0][0]
+    assert snapshot_arg.is_on_task is False
+
+async def test_watchdog_loop_does_not_call_on_off_task_when_on_task(mocker):
+    session = Session(plan="calculus revision")
+    on_off_task = AsyncMock()
+
+    mocker.patch("watchdog.get_active_window_info", return_value=("code.exe", "main.py - VS Code"))
+    mocker.patch("watchdog.get_idle_seconds", return_value=0)
+    mocker.patch("watchdog.get_browser_url", return_value=None)
+    mocker.patch("watchdog._sleep", new=_yield_once)
+
+    await _run_one_tick(watchdog_loop(session, on_off_task), mocker)
+
+    on_off_task.assert_not_called()
+    assert session.off_task_start is None
+
+async def test_watchdog_loop_skips_callback_when_idle(mocker):
+    session = Session(plan="calculus revision")
+    on_off_task = AsyncMock()
+
+    mocker.patch("watchdog.get_active_window_info", return_value=("chrome.exe", "YouTube"))
+    mocker.patch("watchdog.get_idle_seconds", return_value=999)
+    mocker.patch("watchdog.get_browser_url", return_value="https://youtube.com/watch?v=abc")
+    mocker.patch("watchdog._sleep", new=_yield_once)
+
+    await _run_one_tick(watchdog_loop(session, on_off_task), mocker)
+
+    on_off_task.assert_not_called()
+
+async def test_watchdog_loop_appends_snapshot_to_history(mocker):
+    session = Session(plan="calculus revision")
+    on_off_task = AsyncMock()
+
+    mocker.patch("watchdog.get_active_window_info", return_value=("code.exe", "notes.py"))
+    mocker.patch("watchdog.get_idle_seconds", return_value=0)
+    mocker.patch("watchdog.get_browser_url", return_value=None)
+    mocker.patch("watchdog._sleep", new=_yield_once)
+
+    await _run_one_tick(watchdog_loop(session, on_off_task), mocker)
+
+    assert len(session.snapshot_history) >= 1
+    assert session.snapshot_history[0].process == "code.exe"
