@@ -1,5 +1,5 @@
 from unittest.mock import patch, MagicMock
-from watchdog import get_active_window_info, get_idle_seconds
+from watchdog import get_active_window_info, get_idle_seconds, get_browser_url, CHROMIUM_PROCESSES
 
 def test_get_active_window_info_returns_process_and_title(mocker):
     mocker.patch("watchdog.win32gui.GetForegroundWindow", return_value=12345)
@@ -38,3 +38,20 @@ def test_get_idle_seconds_returns_integer(mocker):
     result = get_idle_seconds()
     assert isinstance(result, int)
     assert result >= 0
+
+def test_get_browser_url_returns_none_for_non_browser():
+    result = get_browser_url("notepad.exe")
+    assert result is None
+
+def test_get_browser_url_returns_none_for_non_browser_edge_case():
+    result = get_browser_url("chrome_helper.exe")
+    assert result is None
+
+def test_chromium_processes_contains_chrome_and_edge():
+    assert "chrome.exe" in CHROMIUM_PROCESSES
+    assert "msedge.exe" in CHROMIUM_PROCESSES
+
+def test_get_browser_url_returns_none_on_automation_failure(mocker):
+    mocker.patch.dict("sys.modules", {"comtypes": None})
+    result = get_browser_url("chrome.exe")
+    assert result is None
