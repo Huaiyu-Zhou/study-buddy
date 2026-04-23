@@ -10,7 +10,7 @@ class WindowSnapshot:
     window_title: str
     url: Optional[str]
     idle_seconds: int
-    is_on_task: Optional[bool]  # True=on-task, False=off-task, None=ambiguous (send to Claude)
+    is_on_task: Optional[bool]  # True=on-task, False=off-task, None=ambiguous (send to LLM)
 
 
 @dataclass
@@ -23,6 +23,8 @@ class Session:
     distraction_count: int = 0
     focus_streak_start: Optional[datetime] = None
     conversation_history: list[dict] = field(default_factory=list)
+    break_end: Optional[datetime] = None
+    end_requested: bool = False
 
     def off_task_duration_seconds(self) -> int:
         """Seconds the user has been continuously off-task. 0 if currently on-task."""
@@ -41,3 +43,9 @@ class Session:
         if self.last_intervention is None:
             return None
         return int((datetime.now() - self.last_intervention).total_seconds())
+
+    def is_on_break(self) -> bool:
+        """True if the user is currently in a timed break period."""
+        if self.break_end is None:
+            return False
+        return datetime.now() < self.break_end
