@@ -10,7 +10,7 @@
 │  │                     Pipecat Pipeline                        │   │
 │  │                                                             │   │
 │  │  ┌───────────┐    ┌───────────┐    ┌────────────────────┐  │   │
-│  │  │  Whisper  │───▶│  Claude  │───▶│  ElevenLabs Turbo  │  │   │
+│  │  │  Whisper  │───▶│  Claude  │───▶│  Fish Audio Turbo  │  │   │
 │  │  │  STT      │    │  (Brain) │    │  TTS (streaming)   │  │   │
 │  │  │  + VAD    │    │          │    │                    │  │   │
 │  │  └───────────┘    └────┬─────┘    └────────────────────┘  │   │
@@ -33,7 +33,7 @@
 The core voice loop uses **Pipecat** as the orchestrator. Every stage overlaps — TTS begins
 speaking before Claude has finished generating, which brings Time-to-First-Audio to
 roughly 1.5–3 seconds on CPU (VAD finalization + Whisper inference + Claude first token +
-ElevenLabs first audio chunk).
+Fish Audio first audio chunk).
 
 ```
 User speaks
@@ -51,7 +51,7 @@ User speaks
 [Claude] — streams tokens word-by-word
     │
     ▼
-[ElevenLabs Turbo] — converts streaming tokens to audio chunks as they arrive
+[Fish Audio Turbo] — converts streaming tokens to audio chunks as they arrive
     │
     ▼
 Speaker output (user hears coach almost immediately)
@@ -217,10 +217,10 @@ STT runs offline for privacy. Local Whisper means ambient listening doesn't send
 any cloud service. Use `base` model (74MB, ~200MB RAM) as default — transcribes short
 phrases in 0.5–2s on CPU. Must run in a thread pool executor, not the asyncio event loop.
 
-**Why ElevenLabs for TTS?**
-Voice quality matters for a coaching persona people will hear for hours. ElevenLabs Turbo
+**Why Fish Audio for TTS?**
+Voice quality matters for a coaching persona people will hear for hours. Fish Audio Turbo
 supports streaming, so audio begins playing before the full response is generated. Requires
-internet + `ELEVENLABS_API_KEY`. Free tier: 10,000 chars/month.
+internet + `FISH_AUDIO_API_KEY`. Free tier: 10,000 chars/month.
 
 **Why MemPalace over a simple conversation log?**
 A flat log grows unbounded and doesn't support semantic retrieval. MemPalace lets the coach
@@ -243,7 +243,7 @@ Explained" might be on-task. Context matters, and rules can't encode it.
 | Idle detection | `pywin32` `GetLastInputInfo` | |
 | STT | `faster-whisper` + Silero VAD | Local, CPU-capable, thread pool executor |
 | AI coaching | `anthropic` SDK | Claude Sonnet (latest) |
-| TTS | `elevenlabs` (Turbo) | Streaming, API key required |
+| TTS | `fish_audio` (Turbo) | Streaming, API key required |
 | Long-term memory | `mempalace` | Local, ChromaDB + SQLite, verbatim storage |
 | Audio playback | `pygame` | Cross-platform |
 | Async runtime | `asyncio` | Concurrent watchdog + pipeline |
@@ -256,5 +256,5 @@ Explained" might be on-task. Context matters, and rules can't encode it.
 - **Python:** 3.10+
 - **OS:** Windows 10 or Windows 11 (pywin32 is Windows-only)
 - **Permissions:** pywin32 UI Automation (browser URL extraction) may require running as administrator
-- **API keys:** `ANTHROPIC_API_KEY` (required), `ELEVENLABS_API_KEY` (required for TTS)
-- **Internet:** required for Claude API calls and ElevenLabs TTS; STT runs fully offline
+- **API keys:** `ANTHROPIC_API_KEY` (required), `FISH_AUDIO_API_KEY` (required for TTS)
+- **Internet:** required for Claude API calls and Fish Audio TTS; STT runs fully offline

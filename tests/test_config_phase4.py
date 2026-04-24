@@ -1,7 +1,6 @@
-def test_elevenlabs_model_is_defined():
-    from config import ELEVENLABS_MODEL
-    assert isinstance(ELEVENLABS_MODEL, str)
-    assert len(ELEVENLABS_MODEL) > 0
+def test_fish_audio_reference_id_is_defined():
+    from config import FISH_AUDIO_REFERENCE_ID
+    assert isinstance(FISH_AUDIO_REFERENCE_ID, str)
 
 
 def test_tts_output_format_is_defined():

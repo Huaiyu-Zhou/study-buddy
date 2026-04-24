@@ -41,7 +41,7 @@ Someone studying alone — student, self-learner, professional — who wants an 
 - Users can speak to the coach proactively at any time — not just in response to interventions
 
 ### 4. Voice In / Voice Out
-- The coach speaks aloud using text-to-speech (ElevenLabs Turbo, streaming)
+- The coach speaks aloud using text-to-speech (Fish Audio Turbo, streaming)
 - The user can speak back naturally — the system listens ambiently via Silero VAD
 - No push-to-talk required; the system detects when the user is speaking
 - Barge-in supported: speaking while the coach is talking immediately interrupts it

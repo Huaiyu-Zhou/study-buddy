@@ -1,6 +1,6 @@
 """
-Smoke test for Phase 4 voice output — hits real ElevenLabs + DeepSeek APIs.
-Requires ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, and DEEPSEEK_API_KEY in .env.
+Smoke test for Phase 4 voice output — hits real Fish Audio + DeepSeek APIs.
+Requires FISH_AUDIO_API_KEY, FISH_AUDIO_REFERENCE_ID, and DEEPSEEK_API_KEY in .env.
 
 Usage: python smoke_voice.py
 """
@@ -19,11 +19,11 @@ def main():
     print("=== Study Buddy — Phase 4 Voice Smoke Test ===\n")
 
     # Verify keys are set
-    if not config.ELEVENLABS_API_KEY:
-        print("ERROR: ELEVENLABS_API_KEY not set in .env")
+    if not config.FISH_AUDIO_API_KEY:
+        print("ERROR: FISH_AUDIO_API_KEY not set in .env")
         return
-    if not config.ELEVENLABS_VOICE_ID:
-        print("ERROR: ELEVENLABS_VOICE_ID not set in .env")
+    if not config.FISH_AUDIO_REFERENCE_ID:
+        print("ERROR: FISH_AUDIO_REFERENCE_ID not set in .env")
         return
     if not config.DEEPSEEK_API_KEY:
         print("ERROR: DEEPSEEK_API_KEY not set in .env")

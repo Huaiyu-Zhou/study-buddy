@@ -42,7 +42,7 @@ Two paths to session end:
 - Python 3.10+
 - Windows 10/11 (pywin32 is Windows-only)
 - pywin32 UI Automation (browser URL extraction) may require running as administrator
-- ElevenLabs API key required for TTS
+- Fish Audio API key required for TTS
 - Anthropic API key required for coaching
 
 ---

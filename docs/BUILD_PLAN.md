@@ -7,10 +7,10 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 ## Phase 1 — Foundation
 *Goal: project skeleton, config, dependencies installed and importable*
 
-- [ ] `requirements.txt` — pin all dependencies
-- [ ] `.env.example` — `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`
-- [ ] `config.py` — intervals, thresholds, model names, voice ID, Whisper model size
-- [ ] `session.py` — session state: plan, persona, snapshot history, off-task timer, distraction count, conversation history, focus streak
+- [x] `requirements.txt` — pin all dependencies
+- [x] `.env.example` — `ANTHROPIC_API_KEY`, `FISH_AUDIO_API_KEY`
+- [x] `config.py` — intervals, thresholds, model names, voice ID, Whisper model size
+- [x] `session.py` — session state: plan, persona, snapshot history, off-task timer, distraction count, conversation history, focus streak
 
 **Done when:** `python -c "from session import Session; print(Session())"` works
 
@@ -19,11 +19,11 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 ## Phase 2 — Activity Watchdog
 *Goal: the system can watch what the user is doing*
 
-- [ ] `watchdog.py` — capture active process + window title (`pywin32`)
-- [ ] `watchdog.py` — browser URL extraction for Chrome/Edge (UI Automation, with fallback)
-- [ ] `watchdog.py` — idle time detection (`GetLastInputInfo`)
-- [ ] `watchdog.py` — two-tier classifier: local heuristics first, flag ambiguous cases
-- [ ] `watchdog.py` — async tick loop, appends `WindowSnapshot` to session
+- [x] `watchdog.py` — capture active process + window title (`pywin32`)
+- [x] `watchdog.py` — browser URL extraction for Chrome/Edge (UI Automation, with fallback)
+- [x] `watchdog.py` — idle time detection (`GetLastInputInfo`)
+- [x] `watchdog.py` — two-tier classifier: local heuristics first, flag ambiguous cases
+- [x] `watchdog.py` — async tick loop, appends `WindowSnapshot` to session
 
 **Done when:** running the watchdog for 60 seconds prints a readable log of windows + on/off-task classification
 
@@ -32,14 +32,14 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 ## Phase 3 — Pipecat Pipeline (no voice yet)
 *Goal: Pipecat pipeline wired up with Claude, text in / text out*
 
-- [ ] `pipeline.py` — Pipecat pipeline setup
-- [ ] `pipeline.py` — Claude integration with system prompt (plan + persona + conversation history)
-- [ ] `pipeline.py` — tool call definitions (`set_break`, `change_persona`, `load_wing`, `update_plan`, `get_session_summary`)
-- [ ] `pipeline.py` — watchdog injection: system message → pipeline when off-task threshold crossed
-- [ ] `pipeline.py` — cooldown enforcement: minimum time between interventions (uses `last_intervention_timestamp` from session)
-- [ ] `pipeline.py` — escalation logic: distraction count tracked, tone escalates after repeated offences
-- [ ] `pipeline.py` — positive reinforcement: trigger unprompted encouragement after configurable focus streak (default 25 min)
-- [ ] Test: pipe a text message in, get a text response back with tool calls working
+- [x] `pipeline.py` — Pipecat pipeline setup
+- [x] `pipeline.py` — Claude integration with system prompt (plan + persona + conversation history)
+- [x] `pipeline.py` — tool call definitions (`set_break`, `change_persona`, `load_wing`, `update_plan`, `get_session_summary`)
+- [x] `pipeline.py` — watchdog injection: system message → pipeline when off-task threshold crossed
+- [x] `pipeline.py` — cooldown enforcement: minimum time between interventions (uses `last_intervention_timestamp` from session)
+- [x] `pipeline.py` — escalation logic: distraction count tracked, tone escalates after repeated offences
+- [x] `pipeline.py` — positive reinforcement: trigger unprompted encouragement after configurable focus streak (default 25 min)
+- [x] Test: pipe a text message in, get a text response back with tool calls working
 
 **Done when:** sending "I'm on YouTube" as a fake watchdog event produces a coach text response; sending it 3 times escalates the tone; 25-min focus timer triggers encouragement
 
@@ -48,9 +48,9 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 ## Phase 4 — Voice Output
 *Goal: pipeline speaks*
 
-- [ ] Add ElevenLabs Turbo TTS to Pipecat pipeline (streaming)
-- [ ] `voice_output.py` — mic mute/unmute hooks (prevent echo while coach is speaking)
-- [ ] Smoke test: coach says "Your study session is starting. Good luck."
+- [x] Add Fish Audio Turbo TTS to Pipecat pipeline (streaming)
+- [x] `voice_output.py` — mic mute/unmute hooks (prevent echo while coach is speaking)
+- [x] Smoke test: coach says "Your study session is starting. Good luck."
 
 **Done when:** watchdog trigger produces spoken audio through speakers
 
@@ -109,8 +109,8 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 *Goal: handles real-world failure gracefully*
 
 - [ ] Graceful shutdown on Ctrl+C: session summary spoken + written ("62 min studied, 3 distractions")
-- [ ] Error handling: mic not found, API key missing, pywin32 permission errors, ElevenLabs rate limit
-- [ ] CLI flags / `.env` for: persona, off-task threshold, cooldown, Whisper model, ElevenLabs voice ID
+- [ ] Error handling: mic not found, API key missing, pywin32 permission errors, Fish Audio rate limit
+- [ ] CLI flags / `.env` for: persona, off-task threshold, cooldown, Whisper model, Fish Audio voice ID
 - [ ] `README.md` — setup instructions
 
 ---

@@ -5,11 +5,10 @@ load_dotenv()
 
 # API keys (unused in Phase 1-2, loaded for later phases)
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
-ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY", "")
-ELEVENLABS_VOICE_ID: str = os.getenv("ELEVENLABS_VOICE_ID", "")
-ELEVENLABS_MODEL: str = os.getenv("ELEVENLABS_MODEL", "eleven_flash_v2_5")
-TTS_OUTPUT_FORMAT: str = "pcm_24000"   # raw 16-bit LE PCM at 24kHz — no decoding needed
-TTS_SAMPLE_RATE: int = 24000
+FISH_AUDIO_API_KEY: str = os.getenv("FISH_AUDIO_API_KEY", "")
+FISH_AUDIO_REFERENCE_ID: str = os.getenv("FISH_AUDIO_REFERENCE_ID", "")
+TTS_OUTPUT_FORMAT: str = "pcm"
+TTS_SAMPLE_RATE: int = 44100
 DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
