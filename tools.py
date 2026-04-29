@@ -1,6 +1,26 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Any
+
+import config
+from memory import StudyMemory
 from session import Session
+
+logger = logging.getLogger(__name__)
+
+# Lazily initialised — None until first use
+_memory_instance: StudyMemory | None = None
+
+
+def _get_memory() -> StudyMemory | None:
+    global _memory_instance
+    if _memory_instance is None:
+        try:
+            _memory_instance = StudyMemory(palace_path=config.MEMPALACE_PALACE_PATH)
+        except Exception as e:
+            logger.warning("Failed to initialise MemPalace: %s", e)
+            return None
+    return _memory_instance
 
 
 TOOL_SCHEMAS: list[dict] = [
@@ -114,8 +134,18 @@ def _change_persona(persona: str, session: Session) -> str:
 
 
 def _load_wing(subject: str, session: Session) -> str:
-    # MemPalace integration comes in Phase 6 — stub for now
-    return f"Memory wing loaded for: {subject}."
+    session.subject = subject
+    mem = _get_memory()
+    if mem is None:
+        return f"Memory wing loaded for: {subject}. (MemPalace unavailable — running without long-term memory.)"
+
+    results = mem.search(f"study session {subject}", wing=subject, n_results=3)
+    if not results:
+        return f"Memory wing loaded for: {subject}. No memories found yet — this will be your first recorded session."
+
+    snippets = [r["text"][:200] for r in results]
+    context = "\n".join(snippets)
+    return f"Memory wing loaded for: {subject}. Here's what I remember:\n{context}"
 
 
 def _update_plan(new_plan: str, session: Session) -> str:
