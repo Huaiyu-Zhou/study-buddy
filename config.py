@@ -28,6 +28,12 @@ MAX_SNAPSHOT_HISTORY: int = 20
 # Whisper (used in Phase 5)
 WHISPER_MODEL_SIZE: str = "base"
 
+# Voice input (Phase 5)
+MIC_SAMPLE_RATE: int = 16000          # Whisper expects 16 kHz
+MIC_CHUNK_FRAMES: int = 512           # ~32 ms per chunk at 16 kHz
+VAD_THRESHOLD: float = 0.5            # Silero VAD confidence threshold
+VAD_SILENCE_MS: int = 700             # ms of silence before speech is considered done
+
 # Heuristic classifier — domains classified without calling Claude
 KNOWN_DISTRACTION_DOMAINS: set[str] = {
     "youtube.com",
