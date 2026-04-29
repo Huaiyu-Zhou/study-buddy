@@ -12,6 +12,9 @@ TTS_SAMPLE_RATE: int = 44100
 DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
+# MemPalace (Phase 6)
+MEMPALACE_PALACE_PATH: str = os.getenv("MEMPALACE_PALACE_PATH", os.path.expanduser("~/.mempalace/palace"))
+
 # Watchdog polling
 WATCHDOG_INTERVAL_SECONDS: int = 30
 IDLE_THRESHOLD_SECONDS: int = 180       # 3 min idle = stepped away, pause off-task timer

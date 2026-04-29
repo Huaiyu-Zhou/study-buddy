@@ -19,3 +19,8 @@ def test_known_distractions_includes_youtube():
 
 def test_known_study_includes_khanacademy():
     assert "khanacademy.org" in config.KNOWN_STUDY_DOMAINS
+
+def test_mempalace_palace_path_exists():
+    assert hasattr(config, "MEMPALACE_PALACE_PATH")
+    assert isinstance(config.MEMPALACE_PALACE_PATH, str)
+    assert len(config.MEMPALACE_PALACE_PATH) > 0
