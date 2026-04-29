@@ -52,3 +52,17 @@ def test_window_snapshot_fields():
 def test_session_repr_works():
     s = Session(plan="calculus revision")
     assert "calculus revision" in repr(s)
+
+def test_session_has_subject_field():
+    s = Session()
+    assert s.subject == ""
+
+def test_session_has_start_timestamp():
+    before = datetime.now()
+    s = Session()
+    assert s.session_start >= before
+    assert s.session_start <= datetime.now()
+
+def test_session_subject_can_be_set():
+    s = Session(subject="calculus")
+    assert s.subject == "calculus"

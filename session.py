@@ -17,6 +17,8 @@ class WindowSnapshot:
 class Session:
     plan: str = ""
     persona: str = "encouraging friend"
+    subject: str = ""
+    session_start: datetime = field(default_factory=datetime.now)
     snapshot_history: list[WindowSnapshot] = field(default_factory=list)
     off_task_start: Optional[datetime] = None
     last_intervention: Optional[datetime] = None
