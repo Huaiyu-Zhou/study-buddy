@@ -59,11 +59,11 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 ## Phase 5 — Voice Input
 *Goal: user can speak and be heard*
 
-- [ ] `voice_input.py` — load `faster-whisper` (`base` model, downloaded on first run — warn user)
-- [ ] `voice_input.py` — run Whisper in thread pool executor (not event loop)
-- [ ] `voice_input.py` — Silero VAD loop, skip transcription while TTS is playing
-- [ ] Add STT to Pipecat pipeline
-- [ ] Test barge-in: speak while coach is talking, coach stops
+- [x] `voice_input.py` — load `faster-whisper` (`base` model, downloaded on first run — warn user)
+- [x] `voice_input.py` — run Whisper in thread pool executor (not event loop)
+- [x] `voice_input.py` — Silero VAD loop, skip transcription while TTS is playing
+- [x] Add STT to Pipecat pipeline
+- [x] Test barge-in: speak while coach is talking, coach stops
 
 **Done when:** full voice loop works — speak → transcribe → Claude responds → TTS plays
 
