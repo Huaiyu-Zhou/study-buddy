@@ -5,6 +5,7 @@ from typing import Optional
 import openai
 
 import config
+from memory import StudyMemory
 from session import Session
 from tools import TOOL_SCHEMAS, handle_tool_call
 
@@ -26,6 +27,7 @@ class CoachingPipeline:
     def __init__(self, session: Session, client: openai.OpenAI) -> None:
         self.session = session
         self.client = client
+        self.memory_context: str = ""
 
     def build_system_prompt(self) -> str:
         parts = [
@@ -34,10 +36,22 @@ class CoachingPipeline:
             "Monitor focus, give brief interventions when the user goes off-task, and celebrate focus streaks.",
             "Keep responses concise — 1-3 sentences unless the user asks for more.",
         ]
+        if self.memory_context:
+            parts.append(f"Previous sessions:\n{self.memory_context}")
         note = _escalation_note(self.session.distraction_count)
         if note:
             parts.append(note)
         return "\n".join(parts)
+
+    def load_memory(self) -> None:
+        """Run MemPalace wake-up for the current subject and store context."""
+        if not self.session.subject:
+            return
+        try:
+            mem = StudyMemory()
+            self.memory_context = mem.wake_up(wing=self.session.subject)
+        except Exception:
+            self.memory_context = ""
 
     def chat(self, user_message: str) -> str:
         """Send a message through the pipeline and return the coach's text reply."""
