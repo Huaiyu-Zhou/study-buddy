@@ -72,11 +72,11 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 ## Phase 6 — MemPalace Integration
 *Goal: coach has long-term memory across sessions*
 
-- [ ] `memory.py` — MemPalace init, wing/room structure per subject
-- [ ] `memory.py` — wake-up on session start: load relevant history into system prompt
-- [ ] `memory.py` — write session events (interventions, responses, outcomes) at end of session
-- [ ] Wire `load_wing` tool call to MemPalace wake-up
-- [ ] Test: run two sessions on same subject, verify second session coach references first
+- [x] `memory.py` — MemPalace init, wing/room structure per subject
+- [x] `memory.py` — wake-up on session start: load relevant history into system prompt
+- [x] `memory.py` — write session events (interventions, responses, outcomes) at end of session
+- [x] Wire `load_wing` tool call to MemPalace wake-up
+- [x] Test: run two sessions on same subject, verify second session coach references first
 
 **Done when:** coach mentions something from a previous session without being told
 

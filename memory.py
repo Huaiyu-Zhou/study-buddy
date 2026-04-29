@@ -42,7 +42,10 @@ class StudyMemory:
     def search(self, query: str, wing: str, room: Optional[str] = None, n_results: int = 5) -> list[dict]:
         """Semantic search across stored sessions. Returns list of result dicts."""
         try:
-            response = search_memories(query=query, wing=wing, room=room, n_results=n_results)
+            kwargs = {"query": query, "wing": wing, "room": room, "n_results": n_results}
+            if self.palace_path:
+                kwargs["palace_path"] = self.palace_path
+            response = search_memories(**kwargs)
             return response.get("results", [])
         except Exception as e:
             logger.warning("MemPalace search failed: %s", e)
@@ -74,22 +77,25 @@ class StudyMemory:
         """Write the full session to MemPalace as a verbatim drawer under the subject wing."""
         text = self._build_session_text(session)
         wing = session.subject or "general"
-        tmp_path = None
+        tmp_dir = None
 
         try:
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            # Create a dedicated temp directory so mempalace mine only scans the session file
+            tmp_dir = tempfile.mkdtemp(prefix="studybuddy_session_")
+            tmp_path = os.path.join(tmp_dir, f"session_{wing}.md")
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 f.write(text)
-                tmp_path = f.name
 
-            cmd = ["mempalace", "mine", os.path.dirname(tmp_path), "--wing", wing]
-            subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            cmd = ["mempalace", "mine", tmp_dir, "--wing", wing]
+            subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             logger.info("Session persisted to MemPalace wing '%s'", wing)
         except Exception as e:
             logger.warning("Failed to persist session to MemPalace: %s", e)
         finally:
-            if tmp_path:
+            if tmp_dir:
                 try:
-                    os.unlink(tmp_path)
+                    import shutil
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
                 except OSError:
                     pass
 
