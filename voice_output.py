@@ -5,6 +5,7 @@ import pyaudio
 from fishaudio import FishAudio
 
 import config
+import voice_input as _voice_input
 from mic_control import mute_mic, unmute_mic
 
 logger = logging.getLogger(__name__)
@@ -18,12 +19,15 @@ def _create_client() -> FishAudio:
 def speak(text: Optional[str]) -> None:
     """Stream text through Fish Audio TTS and play through speakers.
 
-    Mutes the microphone during playback to prevent echo feedback.
+    Sets voice_input.is_tts_playing=True during playback so the VAD loop
+    skips transcription and prevents echo feedback.
+    Mutes the microphone for the same reason.
     Handles errors gracefully — logs and continues, never raises.
     """
     if not text:
         return
 
+    _voice_input.is_tts_playing = True
     mute_mic()
     try:
         client = _create_client()
@@ -50,6 +54,7 @@ def speak(text: Optional[str]) -> None:
             stream.close()
             pa.terminate()
     except Exception as e:
-        logger.error(f"TTS playback failed: {e}")
+        logger.error("TTS playback failed: %s", e)
     finally:
+        _voice_input.is_tts_playing = False
         unmute_mic()

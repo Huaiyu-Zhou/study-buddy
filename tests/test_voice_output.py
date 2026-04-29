@@ -76,3 +76,25 @@ def test_speak_skips_none_text(mocker):
 
     voice_output.speak(None)
     mock_client.tts.convert.assert_not_called()
+
+
+def test_speak_clears_tts_flag_after_playback(mocker):
+    """is_tts_playing must be False after speak() completes."""
+    import voice_input
+
+    mock_client = MagicMock()
+    mock_client.tts.convert.return_value = iter([b"audio"])
+    mocker.patch("voice_output._create_client", return_value=mock_client)
+
+    mock_pa_instance = MagicMock()
+    mock_audio_stream = MagicMock()
+    mock_pa_instance.open.return_value = mock_audio_stream
+    mocker.patch("voice_output.pyaudio.PyAudio", return_value=mock_pa_instance)
+
+    mocker.patch("voice_output.mute_mic")
+    mocker.patch("voice_output.unmute_mic")
+
+    voice_output.speak("hello")
+
+    assert voice_input.is_tts_playing is False
+
