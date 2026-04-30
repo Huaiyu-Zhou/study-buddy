@@ -1,6 +1,15 @@
+"""Tool schemas and Pipecat function-call handlers for the Study Buddy coach.
+
+Pipecat registers each tool as an async handler via llm.register_function().
+Handlers receive a FunctionCallParams object and return results via
+params.result_callback().
+"""
+
 import logging
 from datetime import datetime, timedelta
 from typing import Any
+
+from pipecat.services.llm_service import FunctionCallParams
 
 import config
 from memory import StudyMemory
@@ -107,62 +116,79 @@ TOOL_SCHEMAS: list[dict] = [
 ]
 
 
-def handle_tool_call(name: str, tool_input: dict[str, Any], session: Session) -> str:
-    if name == "set_break":
-        return _set_break(tool_input["minutes"], session)
-    if name == "change_persona":
-        return _change_persona(tool_input["persona"], session)
-    if name == "load_wing":
-        return _load_wing(tool_input["subject"], session)
-    if name == "update_plan":
-        return _update_plan(tool_input["new_plan"], session)
-    if name == "get_session_summary":
-        return _get_session_summary(session)
-    if name == "end_session":
-        return _end_session(session)
-    raise ValueError(f"Unknown tool: {name}")
+def register_tools(llm, session: Session) -> None:
+    """Register all tool handlers onto a Pipecat LLM service.
 
+    Each handler is an async function that receives FunctionCallParams
+    and sends results back via params.result_callback().
+    """
 
-def _set_break(minutes: int, session: Session) -> str:
-    session.break_end = datetime.now() + timedelta(minutes=minutes)
-    return f"Break started. I'll check back in {minutes} minute(s)."
+    async def _on_set_break(params: FunctionCallParams):
+        minutes = params.arguments["minutes"]
+        session.break_end = datetime.now() + timedelta(minutes=minutes)
+        await params.result_callback(f"Break started. I'll check back in {minutes} minute(s).")
 
+    async def _on_change_persona(params: FunctionCallParams):
+        session.persona = params.arguments["persona"]
+        await params.result_callback(f"Persona updated to: {params.arguments['persona']}.")
 
-def _change_persona(persona: str, session: Session) -> str:
-    session.persona = persona
-    return f"Persona updated to: {persona}."
+    async def _on_load_wing(params: FunctionCallParams):
+        subject = params.arguments["subject"]
+        session.subject = subject
+        mem = _get_memory()
+        if mem is None:
+            await params.result_callback(
+                f"Memory wing loaded for: {subject}. (MemPalace unavailable — running without long-term memory.)"
+            )
+            return
 
+        results = mem.search(f"study session {subject}", wing=subject, n_results=3)
+        if not results:
+            await params.result_callback(
+                f"Memory wing loaded for: {subject}. No memories found yet — this will be your first recorded session."
+            )
+            return
 
-def _load_wing(subject: str, session: Session) -> str:
-    session.subject = subject
-    mem = _get_memory()
-    if mem is None:
-        return f"Memory wing loaded for: {subject}. (MemPalace unavailable — running without long-term memory.)"
+        snippets = [r["text"][:200] for r in results]
+        ctx = "\n".join(snippets)
+        await params.result_callback(f"Memory wing loaded for: {subject}. Here's what I remember:\n{ctx}")
 
-    results = mem.search(f"study session {subject}", wing=subject, n_results=3)
-    if not results:
-        return f"Memory wing loaded for: {subject}. No memories found yet — this will be your first recorded session."
+    async def _on_update_plan(params: FunctionCallParams):
+        session.plan = params.arguments["new_plan"]
+        session.off_task_start = None  # reset off-task timer — new plan context
+        await params.result_callback(f"Study plan updated to: {params.arguments['new_plan']}.")
 
-    snippets = [r["text"][:200] for r in results]
-    context = "\n".join(snippets)
-    return f"Memory wing loaded for: {subject}. Here's what I remember:\n{context}"
+    async def _on_get_session_summary(params: FunctionCallParams):
+        focus_min = session.focus_streak_seconds() // 60
+        summary = (
+            f"Session summary: {session.distraction_count} distraction(s) so far. "
+            f"Current focus streak: {focus_min} minute(s). "
+            f"Study plan: {session.plan}."
+        )
+        await params.result_callback(summary)
 
+    async def _on_end_session(params: FunctionCallParams):
+        session.end_requested = True
 
-def _update_plan(new_plan: str, session: Session) -> str:
-    session.plan = new_plan
-    session.off_task_start = None  # reset off-task timer — new plan context
-    return f"Study plan updated to: {new_plan}."
+        # Persist conversation to MemPalace
+        mem = _get_memory()
+        if mem:
+            try:
+                mem.persist(session)
+            except Exception as e:
+                logger.warning("Failed to persist session to MemPalace: %s", e)
 
+        focus_min = session.focus_streak_seconds() // 60
+        summary = (
+            f"Session ending. {session.distraction_count} distraction(s). "
+            f"Focus streak: {focus_min} minute(s)."
+        )
+        await params.result_callback(summary)
 
-def _get_session_summary(session: Session) -> str:
-    focus_min = session.focus_streak_seconds() // 60
-    return (
-        f"Session summary: {session.distraction_count} distraction(s) so far. "
-        f"Current focus streak: {focus_min} minute(s). "
-        f"Study plan: {session.plan}."
-    )
-
-
-def _end_session(session: Session) -> str:
-    session.end_requested = True
-    return _get_session_summary(session)
+    # Register each handler with the LLM service
+    llm.register_function("set_break", _on_set_break)
+    llm.register_function("change_persona", _on_change_persona)
+    llm.register_function("load_wing", _on_load_wing)
+    llm.register_function("update_plan", _on_update_plan)
+    llm.register_function("get_session_summary", _on_get_session_summary)
+    llm.register_function("end_session", _on_end_session)

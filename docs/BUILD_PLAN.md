@@ -50,22 +50,17 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 
 - [x] Add Fish Audio Turbo TTS to Pipecat pipeline (streaming)
 - [x] `voice_output.py` — mic mute/unmute hooks (prevent echo while coach is speaking)
-- [x] Smoke test: coach says "Your study session is starting. Good luck."
+## Phase 4 & 5 — Pipecat Migration
+*Goal: full streaming pipeline with barge-in support*
 
-**Done when:** watchdog trigger produces spoken audio through speakers
+- [x] Update `requirements.txt` to `pipecat-ai[whisper,fish,local,silero]>=0.0.54`
+- [x] Refactor `tools.py` to use Pipecat `register_function` pattern
+- [x] Implement `StudyBuddyVoicePipeline` using Pipecat `PipelineTask`
+- [x] Migrate imports and schemas to Pipecat v1.1.0 standards
+- [x] Verify pipeline construction with `smoke_pipecat.py`
+- [x] Remove obsolete `pipeline.py`, `voice_input.py`, `voice_output.py`, `mic_control.py`
 
----
-
-## Phase 5 — Voice Input
-*Goal: user can speak and be heard*
-
-- [x] `voice_input.py` — load `faster-whisper` (`base` model, downloaded on first run — warn user)
-- [x] `voice_input.py` — run Whisper in thread pool executor (not event loop)
-- [x] `voice_input.py` — Silero VAD loop, skip transcription while TTS is playing
-- [x] Add STT to Pipecat pipeline
-- [x] Test barge-in: speak while coach is talking, coach stops
-
-**Done when:** full voice loop works — speak → transcribe → Claude responds → TTS plays
+**Done when:** Pipecat orchestrates the full STT → LLM → TTS loop.
 
 ---
 

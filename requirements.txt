@@ -7,15 +7,8 @@ comtypes==1.4.8
 # Phase 3
 openai==1.75.0
 
-# Phase 4
-fish-audio-sdk>=1.0.0
-pyaudio>=0.2.14
-pycaw>=20240210
-
-# Phase 5
-faster-whisper>=1.2.0
-silero-vad>=6.0.0
-numpy>=2.0.0
+# Phase 4 & 5 — Pipecat pipeline (replaces manual audio plumbing)
+pipecat-ai[whisper,fish,local,silero]>=0.0.54
 
 # Phase 6
 mempalace>=3.3.0
