@@ -1,0 +1,19 @@
+# Core (Phase 1-2)
+pywin32==306
+psutil==5.9.8
+python-dotenv==1.0.1
+comtypes==1.4.8
+
+# Phase 3
+openai==1.75.0
+
+# Phase 4 & 5 — Pipecat pipeline (replaces manual audio plumbing)
+pipecat-ai[deepgram,fish,local,silero]>=0.0.54
+
+# Phase 6
+mempalace>=3.3.0
+
+# Dev
+pytest==8.1.1
+pytest-asyncio==0.23.6
+pytest-mock==3.14.0
