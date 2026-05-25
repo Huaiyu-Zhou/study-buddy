@@ -11,6 +11,8 @@ TTS_OUTPUT_FORMAT: str = "pcm"
 TTS_SAMPLE_RATE: int = 44100
 DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL: str = "gpt-4o-mini"
 
 # Deepgram (Phase 7 - Cloud STT)
 DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "")
@@ -38,6 +40,14 @@ MIC_SAMPLE_RATE: int = 16000          # Whisper expects 16 kHz
 MIC_CHUNK_FRAMES: int = 512           # ~32 ms per chunk at 16 kHz
 VAD_THRESHOLD: float = 0.5            # Silero VAD confidence threshold
 VAD_SILENCE_MS: int = 700             # ms of silence before speech is considered done
+
+# Audio device selection
+# Run: python -c "import pyaudio; p=pyaudio.PyAudio(); [print(i, p.get_device_info_by_index(i)['name']) for i in range(p.get_device_count())]"
+# to list available devices and update the indices below.
+# Use None to fall back to the system default device.
+AUDIO_INPUT_DEVICE_INDEX: int | None = None
+AUDIO_OUTPUT_DEVICE_INDEX: int | None = None
+AUDIO_DEVICE_SAMPLE_RATE: int = int(os.getenv("AUDIO_DEVICE_SAMPLE_RATE", "16000"))  # SileroVAD requirement
 
 # Heuristic classifier — domains classified without calling Claude
 KNOWN_DISTRACTION_DOMAINS: set[str] = {

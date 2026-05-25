@@ -16,7 +16,7 @@ class WindowSnapshot:
 @dataclass
 class Session:
     plan: str = ""
-    persona: str = "encouraging friend"
+    persona: str = "高冷、严厉、毒舌且掌控欲极强的女S (Strict Queen)"
     subject: str = ""
     session_start: datetime = field(default_factory=datetime.now)
     snapshot_history: list[WindowSnapshot] = field(default_factory=list)

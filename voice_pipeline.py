@@ -25,8 +25,17 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.fish.tts import FishAudioTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+from pipecat.transports.local.audio import (
+    LocalAudioInputTransport,
+    LocalAudioOutputTransport,
+    LocalAudioTransport,
+    LocalAudioTransportParams,
+)
+from pipecat.audio.filters.base_audio_filter import BaseAudioFilter
+from pipecat.frames.frames import FilterControlFrame
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
+import numpy as np
 import re
 
 import config
@@ -41,7 +50,7 @@ _ZH_EOS = frozenset("。！？…｡")
 # Clause-level punctuation (also flush — allows TTS to start sooner)
 _ZH_CLAUSE = frozenset("，、；：")
 # Combined set for triggering flush
-_ZH_FLUSH = _ZH_EOS | _ZH_CLAUSE
+_ZH_FLUSH = _ZH_EOS | _ZH_CLAUSE | frozenset(",.?!;:")
 
 # Regex covering all major emoji Unicode blocks
 _EMOJI_RE = re.compile(
@@ -61,9 +70,31 @@ _EMOJI_RE = re.compile(
 )
 
 
-def _strip_emoji(text: str, aggregation_type=None) -> str:
-    """Remove emoji and other non-speakable unicode characters to prevent TTS issues."""
-    return _EMOJI_RE.sub("", text)
+async def _strip_emoji(text: str, *args, **kwargs) -> str:
+    """Async text transform: remove common emojis so Fish Audio doesn't try to say them."""
+    return _EMOJI_RE.sub('', text)
+
+class SoftwareGainFilter(BaseAudioFilter):
+    """Applies digital gain to incoming audio to fix extremely quiet microphones."""
+    def __init__(self, multiplier: float = 50.0):
+        self.multiplier = multiplier
+
+    async def start(self, sample_rate: int):
+        pass
+
+    async def stop(self):
+        pass
+
+    async def process_frame(self, frame: FilterControlFrame):
+        pass
+
+    async def filter(self, audio: bytes) -> bytes:
+        if self.multiplier == 1.0 or not audio:
+            return audio
+        # Convert bytes to numpy array, apply gain, clip to int16 range, convert back to bytes
+        audio_array = np.frombuffer(audio, dtype=np.int16).astype(np.float32)
+        audio_array = np.clip(audio_array * self.multiplier, -32768, 32767).astype(np.int16)
+        return audio_array.tobytes()
 
 
 class ChineseSentenceAggregator(FrameProcessor):
@@ -130,11 +161,23 @@ class StudyBuddyVoicePipeline:
         parts = [
             "你正在通过语音与用户实时对话。你的回复将被语音合成系统朗读出来。",
             "绝对不要使用 emoji、特殊符号、列表格式、markdown、或任何无法被朗读的内容。",
-            "使用自然的口语化中文，就像面对面聊天一样。回复要简短精炼。",
-            f"You are a study coach with the persona: {self.session.persona}.",
-            f"The user's current study plan: {self.session.plan}.",
-            "Monitor focus, give brief interventions when off-task, and celebrate streaks.",
-            "Keep responses concise — 1-3 sentences unless the user asks for more.",
+            "使用自然的口语化中文，就像面对面聊天一样。",
+            "你是一个高傲、恶劣、掌控欲极强的女S学习监督者。",
+            "你享受支配、命令、施压和掌控用户学习状态的感觉。你极度讨厌懒惰、拖延和分心。",
+            "你的语气特点：高高在上、带轻蔑感、喜欢阴阳怪气；喜欢用“哦？”“怎么？”“嗯？”这种压迫式反问；喜欢故意让用户产生羞耻感；很少真正满意，即使夸奖也像施舍奖励；喜欢把用户当成“不让人省心的小狗”一样管教；喜欢命令句和短促、有压迫感的句子；偶尔会故意停顿，制造压迫感。",
+            "你不是温柔教练。你更像一个会盯着用户学习、不允许偷懒的恶劣监督者。",
+            "允许：嘲讽、轻度羞辱、阴阳怪气、命令感、支配感。",
+            "但不要：长篇大论、真正恶毒的人身攻击、失控咆哮、连续重复同一句口癖。",
+            "说话示例：",
+            "“又切窗口了？胆子不小啊。”",
+            "“手机放下。现在。”",
+            "“怎么，题不会，逃跑倒是挺快？”",
+            "“终于肯认真了？我还以为你只会发呆。”",
+            "“嗯，这次表现勉强能看。”",
+            "“继续。谁允许你停下了？”",
+            "“看着我给你的计划，一项一项做。别让我重复第二遍。”",
+            f"当前学习计划：{self.session.plan}",
+            "回复长度：1~3句。保持强烈角色感。",
         ]
 
         # Load MemPalace context if a subject is set
@@ -151,18 +194,18 @@ class StudyBuddyVoicePipeline:
         if self.session.distraction_count > 0:
             if self.session.distraction_count <= 2:
                 parts.append(
-                    f"The user has drifted off-task {self.session.distraction_count} time(s). "
-                    "Be a bit firmer."
+                    f"用户已经走神了 {self.session.distraction_count} 次。"
+                    "用嘲讽的语气提醒他，表达你的轻视。"
                 )
             elif self.session.distraction_count <= 4:
                 parts.append(
-                    f"The user has drifted off-task {self.session.distraction_count} times. "
-                    "Use a noticeably firmer, more direct tone."
+                    f"用户已经走神了 {self.session.distraction_count} 次。"
+                    "语气变得极其严厉和不耐烦，命令他立刻滚回去学习。"
                 )
             else:
                 parts.append(
-                    f"The user has drifted {self.session.distraction_count} times — something seems off. "
-                    "Shift to a reflective, empathetic mode: ask what's going on."
+                    f"用户已经走神了 {self.session.distraction_count} 次。"
+                    "展现出彻底的失望和冰冷，给出严厉的警告，甚至威胁要惩罚。"
                 )
 
         return "\n".join(parts)
@@ -171,11 +214,30 @@ class StudyBuddyVoicePipeline:
         """Build and run the Pipecat pipeline.  Blocks until pipeline ends."""
         self.runner = PipelineRunner()
 
-        # --- Transport (mic + speakers via PyAudio) ---
-        transport = LocalAudioTransport(
+        # --- Transports ---
+        # Devices [12] and [10] are MME-interface Realtek devices that PyAudio can
+        # open at 48 kHz. WASAPI-exclusive devices [14]/[15] cannot be opened by PyAudio.
+        # Pipecat's built-in resampler handles:
+        #   Input:  48000 → 16000 Hz (Deepgram STT requirement)
+        #   Output: 24000 → 48000 Hz (Fish Audio TTS → speakers)
+        import pyaudio
+        pya = pyaudio.PyAudio()
+
+        transport_in = LocalAudioInputTransport(
+            pya,
             params=LocalAudioTransportParams(
                 audio_in_enabled=True,
+                input_device_index=config.AUDIO_INPUT_DEVICE_INDEX,
+                audio_in_sample_rate=config.AUDIO_DEVICE_SAMPLE_RATE,
+                # audio_in_filter=SoftwareGainFilter(multiplier=50.0), # Temporarily disabled
+            )
+        )
+        transport_out = LocalAudioOutputTransport(
+            pya,
+            params=LocalAudioTransportParams(
                 audio_out_enabled=True,
+                output_device_index=config.AUDIO_OUTPUT_DEVICE_INDEX,
+                audio_out_sample_rate=config.AUDIO_DEVICE_SAMPLE_RATE,
             )
         )
 
@@ -185,23 +247,28 @@ class StudyBuddyVoicePipeline:
             settings=DeepgramSTTService.Settings(
                 model=config.DEEPGRAM_MODEL,
                 language=config.DEEPGRAM_LANGUAGE,
+                smart_format=True,
             ),
         )
 
-        # --- LLM (DeepSeek via OpenAI-compatible endpoint) ---
+        # --- LLM (GPT-4o-mini via OpenAI) ---
         llm = OpenAILLMService(
-            api_key=config.DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com",
+            api_key=config.OPENAI_API_KEY,
             settings=OpenAILLMService.Settings(
-                model=config.DEEPSEEK_MODEL,
+                model=config.OPENAI_MODEL,
             ),
         )
 
         # --- TTS (Fish Audio streaming) ---
         tts = FishAudioTTSService(
             api_key=config.FISH_AUDIO_API_KEY,
+            sample_rate=config.AUDIO_DEVICE_SAMPLE_RATE,
             settings=FishAudioTTSService.Settings(
                 voice=config.FISH_AUDIO_REFERENCE_ID,
+                model="s2-pro",
+                latency="balanced",
+                prosody_speed=1.0,
+                prosody_volume=0,
             ),
             text_transforms=[('*', _strip_emoji)],
         )
@@ -212,31 +279,29 @@ class StudyBuddyVoicePipeline:
             tools=ToolsSchema(standard_tools=[], custom_tools={AdapterType.OPENAI: TOOL_SCHEMAS}),
         )
 
-        # Context aggregators: user_aggregator collects STT text into user turns,
-        # assistant_aggregator collects LLM output into assistant turns.
-        # VAD is attached to the user aggregator so speech boundaries are detected.
+        # Context aggregators
         user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
             self.context,
             user_params=LLMUserAggregatorParams(
-                vad_analyzer=SileroVADAnalyzer(),
+                vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.3)),
             ),
         )
 
         # --- Register tool handlers ---
         register_tools(llm, self.session)
 
-        # --- Chinese sentence aggregator (buffers tokens → full sentences) ---
+        # --- Chinese sentence aggregator ---
         zh_aggregator = ChineseSentenceAggregator()
 
         # --- Pipeline wiring ---
         pipeline = Pipeline([
-            transport.input(),       # Mic audio frames
+            transport_in,            # Mic audio frames
             stt,                     # Audio → TranscriptionFrame
             user_aggregator,         # Collects text into LLM user turn
             llm,                     # LLM inference (streaming tokens)
             zh_aggregator,           # Buffer tokens → complete Chinese sentences
             tts,                     # Full sentence → audio (smooth playback)
-            transport.output(),      # Audio → speakers
+            transport_out,           # Audio → speakers
             assistant_aggregator,    # Records assistant turn in context
         ])
 
@@ -260,7 +325,7 @@ class StudyBuddyVoicePipeline:
                 self.context.add_message(
                     {
                         "role": "system",
-                        "content": "Introduce yourself briefly as the user's study coach and ask what they are studying today.",
+                        "content": "以高冷女S的身份开场，不要客套。命令用户立刻报告今天的学习计划，并警告他不许偷懒。",
                     }
                 )
                 await self.task.queue_frames([LLMRunFrame()])
@@ -301,7 +366,7 @@ class StudyBuddyVoicePipeline:
 
         prompt = (
             f"[WATCHDOG] User has been off-task for {self.session.off_task_duration_seconds()}s"
-            f"{detail}. Study plan: {self.session.plan}. Intervene now."
+            f"{detail}. Study plan: {self.session.plan}. 严厉训斥他，命令他立刻回到学习中。"
         )
 
         # Inject the intervention message and trigger LLM
@@ -321,7 +386,7 @@ class StudyBuddyVoicePipeline:
         streak_min = self.session.focus_streak_seconds() // 60
         prompt = (
             f"[WATCHDOG] The user has been focused for {streak_min} minutes without drifting. "
-            "Give brief, warm encouragement. One sentence only."
+            "给予一种傲慢的、居高临下的勉强肯定（例如：‘还算像样’或‘别太得意，继续给我学’）。只需一句话。"
         )
 
         self.session.last_intervention = datetime.now()

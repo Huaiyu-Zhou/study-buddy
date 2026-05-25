@@ -86,7 +86,8 @@ class StudyMemory:
             with open(tmp_path, "w", encoding="utf-8") as f:
                 f.write(text)
 
-            cmd = ["mempalace", "mine", tmp_dir, "--wing", wing]
+            import sys
+            cmd = [sys.executable, "-m", "mempalace", "mine", tmp_dir, "--wing", wing]
             subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             logger.info("Session persisted to MemPalace wing '%s'", wing)
         except Exception as e:

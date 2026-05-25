@@ -111,6 +111,7 @@ def classify_snapshot(snapshot: WindowSnapshot) -> Optional[bool]:
 async def watchdog_loop(
     session: Session,
     on_off_task: Callable[[WindowSnapshot, Session], Awaitable[None]],
+    on_on_task: Optional[Callable[[WindowSnapshot, Session], Awaitable[None]]] = None,
 ) -> None:
     """
     Poll active window every WATCHDOG_INTERVAL_SECONDS.
@@ -151,5 +152,9 @@ async def watchdog_loop(
                 await on_off_task(snapshot, session)
             elif snapshot.is_on_task is True:
                 session.off_task_start = None
+                if session.focus_streak_start is None:
+                    session.focus_streak_start = datetime.now()
+                if on_on_task:
+                    await on_on_task(snapshot, session)
 
         await _sleep(WATCHDOG_INTERVAL_SECONDS)

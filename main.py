@@ -17,12 +17,12 @@ logger = logging.getLogger("study_buddy")
 async def main():
     # Check for critical API keys before starting
     missing_keys = []
-    if not config.DEEPSEEK_API_KEY:
-        missing_keys.append("DEEPSEEK_API_KEY")
     if not config.FISH_AUDIO_API_KEY:
         missing_keys.append("FISH_AUDIO_API_KEY")
     if not config.DEEPGRAM_API_KEY:
         missing_keys.append("DEEPGRAM_API_KEY")
+    if not config.OPENAI_API_KEY:
+        missing_keys.append("OPENAI_API_KEY")
     
     if missing_keys:
         logger.error(f"Missing API keys in .env: {', '.join(missing_keys)}")
@@ -35,8 +35,19 @@ async def main():
 
     logger.info("Starting Activity Watchdog...")
     # The watchdog loop calls the pipeline's intervention logic when off-task
+    # and reinforcement logic when on-task
+    async def _on_off_task(snap, sess):
+        await pipeline.maybe_intervene()
+
+    async def _on_on_task(snap, sess):
+        await pipeline.maybe_reinforce()
+
     watchdog_task = asyncio.create_task(
-        watchdog_loop(session, on_off_task=lambda snap, sess: pipeline.maybe_intervene())
+        watchdog_loop(
+            session,
+            on_off_task=_on_off_task,
+            on_on_task=_on_on_task,
+        )
     )
 
     try:
