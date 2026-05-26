@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Study Buddy - Professional Coaching Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@daily-co/daily-js"></script>
+    <style>
+        :root {
+            --bg-gradient: radial-gradient(circle at center, #181427 0%, #0b0914 100%);
+            --panel-bg: rgba(22, 18, 38, 0.7);
+            --border-color: rgba(138, 75, 243, 0.25);
+            --primary: #8a4bf3;
+            --primary-glow: rgba(138, 75, 243, 0.5);
+            --accent-cyan: #00e5ff;
+            --accent-cyan-glow: rgba(0, 229, 255, 0.4);
+            --accent-pink: #ff007f;
+            --accent-pink-glow: rgba(255, 0, 127, 0.4);
+            --accent-green: #39ff14;
+            --text-main: #f3f0ff;
+            --text-muted: #9f9baa;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            justify-content: space-between;
+        }
+
+        header {
+            padding: 24px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 9, 20, 0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+        }
+
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.03);
+            transition: all 0.3s ease;
+        }
+
+        .status-badge .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            box-shadow: 0 0 8px var(--text-muted);
+        }
+
+        .status-badge.idle {
+            color: var(--text-muted);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        .status-badge.idle .dot { background: var(--text-muted); box-shadow: 0 0 8px var(--text-muted); }
+
+        .status-badge.connected {
+            color: var(--accent-cyan);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+        }
+        .status-badge.connected .dot { background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); }
+
+        .status-badge.distracted {
+            color: var(--accent-pink);
+            border-color: var(--accent-pink);
+            box-shadow: 0 0 15px rgba(255, 0, 127, 0.15);
+            animation: pulse-border 1.5s infinite alternate;
+        }
+        .status-badge.distracted .dot { background: var(--accent-pink); box-shadow: 0 0 8px var(--accent-pink); }
+
+        main {
+            flex-grow: 1;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 40px;
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 40px;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .panel:hover {
+            border-color: rgba(138, 75, 243, 0.4);
+        }
+
+        .panel-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            color: var(--text-main);
+            border-left: 3px solid var(--primary);
+            padding-left: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            background: rgba(11, 9, 20, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            border: none;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, var(--primary) 0%, #a272ff 100%);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(138, 75, 243, 0.4);
+        }
+
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(138, 75, 243, 0.6);
+            filter: brightness(1.1);
+        }
+
+        .btn-start:active {
+            transform: translateY(1px);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #cc085e 0%, var(--accent-pink) 100%);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(255, 0, 127, 0.4);
+            display: none;
+        }
+
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(255, 0, 127, 0.6);
+            filter: brightness(1.1);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: rgba(11, 9, 20, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+        }
+
+        .stat-card.distractions .stat-value {
+            color: var(--accent-pink);
+            text-shadow: 0 0 10px rgba(255, 0, 127, 0.2);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        .coach-viewer {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+            position: relative;
+        }
+
+        /* Voice Sphere Visualizer */
+        .voice-sphere-container {
+            width: 250px;
+            height: 250px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .voice-sphere {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--primary) 0%, rgba(11, 9, 20, 0.8) 100%);
+            box-shadow: 0 0 50px var(--primary-glow);
+            z-index: 10;
+            transition: all 0.3s ease;
+            position: relative;
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+
+        .voice-ring {
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-cyan);
+            box-shadow: 0 0 30px var(--accent-cyan-glow);
+            animation: pulse-ring 2.5s infinite ease-out;
+            opacity: 0;
+        }
+
+        .voice-ring:nth-child(2) {
+            animation-delay: 0.8s;
+            border-color: var(--primary);
+            box-shadow: 0 0 30px var(--primary-glow);
+        }
+
+        .voice-ring:nth-child(3) {
+            animation-delay: 1.6s;
+            border-color: var(--accent-pink);
+            box-shadow: 0 0 30px var(--accent-pink-glow);
+        }
+
+        /* Transcription / Dialog box */
+        .console-panel {
+            max-height: 240px;
+            height: 240px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .console-logs {
+            flex-grow: 1;
+            overflow-y: auto;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            padding-right: 10px;
+        }
+
+        .log-entry {
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            padding-bottom: 8px;
+            animation: fade-in 0.3s ease-out;
+        }
+
+        .log-time {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-right: 8px;
+        }
+
+        .log-role {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .log-role.user { color: var(--accent-cyan); }
+        .log-role.coach { color: var(--primary); }
+        .log-role.system { color: var(--accent-pink); }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(138, 75, 243, 0.3);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(138, 75, 243, 0.5);
+        }
+
+        /* Animations */
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(1);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(2.2);
+                opacity: 0;
+            }
+        }
+
+        @keyframes pulse-border {
+            from { border-color: rgba(255, 0, 127, 0.3); }
+            to { border-color: rgba(255, 0, 127, 1); }
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Speaker speaking visual */
+        .is-speaking {
+            animation: sphere-grow 1s infinite alternate ease-in-out;
+        }
+
+        @keyframes sphere-grow {
+            from {
+                transform: scale(1);
+                box-shadow: 0 0 50px var(--primary-glow);
+            }
+            to {
+                transform: scale(1.15);
+                box-shadow: 0 0 80px rgba(138, 75, 243, 0.8), 0 0 20px var(--accent-cyan);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">Study Buddy Coach</div>
+        <div id="statusBadge" class="status-badge idle">
+            <span class="dot"></span>
+            <span class="text">Disconnected</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="sidebar">
+            <!-- Setup Session -->
+            <div class="panel" id="configPanel">
+                <div class="panel-title">Coaching Setup</div>
+                <div class="form-group">
+                    <label for="subjectInput">Subject Wing</label>
+                    <input type="text" id="subjectInput" value="calculus" placeholder="e.g. calculus, physics, coding">
+                </div>
+                <div class="form-group">
+                    <label for="planInput">Study Plan Goal</label>
+                    <input type="text" id="planInput" value="practice integrals and limits" placeholder="What are you studying?">
+                </div>
+                <div class="form-group">
+                    <label for="personaSelect">Supervisor Persona</label>
+                    <select id="personaSelect">
+                        <option value="lady_s">Lady S (Cold & Strict Dominatrix)</option>
+                        <option value="drill_sergeant">Drill Sergeant (High Pressure)</option>
+                        <option value="sarcastic_genius">Sarcastic Genius (Snarky Critic)</option>
+                    </select>
+                </div>
+                <button id="startBtn" class="btn btn-start">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    Start Coaching
+                </button>
+                <button id="stopBtn" class="btn btn-stop">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    Stop Coaching
+                </button>
+            </div>
+
+            <!-- Stats Dashboard -->
+            <div class="panel">
+                <div class="panel-title">Session Diagnostics</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="statTime">00:00</div>
+                        <div class="stat-label">Elapsed Time</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="statStreak">0m</div>
+                        <div class="stat-label">Focus Streak</div>
+                    </div>
+                    <div class="stat-card distractions">
+                        <div class="stat-value" id="statDistractions">0</div>
+                        <div class="stat-label">Distractions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="statStatus">STABLE</div>
+                        <div class="stat-label">Mind State</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Center voice coach visualizer -->
+            <div class="panel coach-viewer">
+                <div class="voice-sphere-container">
+                    <div class="voice-ring"></div>
+                    <div class="voice-ring"></div>
+                    <div class="voice-ring"></div>
+                    <div class="voice-sphere" id="visualizerSphere"></div>
+                </div>
+                <div style="margin-top: 30px; font-family: 'Orbitron', sans-serif; font-size: 0.9rem; color: var(--text-muted); letter-spacing: 1px;" id="speakerStatus">
+                    SYSTEM OFFLINE
+                </div>
+            </div>
+
+            <!-- Speech log console -->
+            <div class="panel console-panel">
+                <div class="panel-title">Coaching Transcript</div>
+                <div class="console-logs" id="consoleLogs">
+                    <div class="log-entry">
+                        <span class="log-time">00:00:00</span>
+                        <span class="log-role system">System:</span>
+                        <span class="log-text">Ready to monitor. Click Start Coaching to begin.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer style="padding: 20px; text-align: center; font-size: 0.75rem; color: var(--text-muted); border-top: 1px solid var(--border-color); background: rgba(11, 9, 20, 0.4);">
+        AI Study Buddy — Dynamic WebRTC Audio Coaching Interface
+    </footer>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusBadgeText = statusBadge.querySelector('.text');
+        const visualizerSphere = document.getElementById('visualizerSphere');
+        const speakerStatus = document.getElementById('speakerStatus');
+        const consoleLogs = document.getElementById('consoleLogs');
+        
+        // Form inputs
+        const subjectInput = document.getElementById('subjectInput');
+        const planInput = document.getElementById('planInput');
+        const personaSelect = document.getElementById('personaSelect');
+
+        // Stats elements
+        const statTime = document.getElementById('statTime');
+        const statStreak = document.getElementById('statStreak');
+        const statDistractions = document.getElementById('statDistractions');
+        const statStatus = document.getElementById('statStatus');
+
+        let callFrame = null;
+        let statsInterval = null;
+        let audioCtx = null;
+        let analyzer = null;
+        let microphoneStream = null;
+        let dataArray = null;
+        let remoteAudioElements = {};
+
+        function addLog(role, text) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const timeStr = new Date().toTimeString().split(' ')[0];
+            
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'log-time';
+            timeSpan.textContent = timeStr;
+            
+            const roleSpan = document.createElement('span');
+            roleSpan.className = `log-role ${role}`;
+            roleSpan.textContent = role.toUpperCase() + ':';
+            
+            const textSpan = document.createElement('span');
+            textSpan.className = 'log-text';
+            textSpan.textContent = text;
+            
+            entry.appendChild(timeSpan);
+            entry.appendChild(roleSpan);
+            entry.appendChild(textSpan);
+            
+            consoleLogs.appendChild(entry);
+            consoleLogs.scrollTop = consoleLogs.scrollHeight;
+        }
+
+        // Setup microphone analyzer for sphere reactivity when USER talks
+        async function setupMicAnalyzer() {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = audioCtx.createMediaStreamSource(microphoneStream);
+                analyzer = audioCtx.createAnalyser();
+                analyzer.fftSize = 64;
+                source.connect(analyzer);
+                
+                const bufferLength = analyzer.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+                
+                drawVisualizer();
+            } catch (err) {
+                console.error("Microphone feedback visualization not supported:", err);
+            }
+        }
+
+        function drawVisualizer() {
+            if (!analyzer) return;
+            requestAnimationFrame(drawVisualizer);
+            
+            analyzer.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / dataArray.length;
+            
+            // Scaled sphere pulse based on volume
+            if (average > 10) {
+                const scale = 1 + (average / 150);
+                visualizerSphere.style.transform = `scale(${scale})`;
+                visualizerSphere.style.boxShadow = `0 0 ${40 + average}px var(--accent-cyan-glow)`;
+                if (speakerStatus.textContent !== "COACH TALKING") {
+                    speakerStatus.textContent = "USER SPEAKING";
+                    speakerStatus.style.color = "var(--accent-cyan)";
+                }
+            } else {
+                if (speakerStatus.textContent === "USER SPEAKING") {
+                    speakerStatus.textContent = "LISTENING";
+                    speakerStatus.style.color = "var(--text-muted)";
+                    visualizerSphere.style.transform = "scale(1)";
+                }
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const resp = await fetch('/session');
+                const data = await resp.json();
+                if (data.active) {
+                    // Update elapsed time
+                    const totalSecs = data.duration_seconds;
+                    const mins = Math.floor(totalSecs / 60).toString().padStart(2, '0');
+                    const secs = (totalSecs % 60).toString().padStart(2, '0');
+                    statTime.textContent = `${mins}:${secs}`;
+
+                    // Update focus streak
+                    const streakMins = Math.floor(data.focus_streak_seconds / 60);
+                    statStreak.textContent = `${streakMins}m`;
+
+                    // Update distractions
+                    statDistractions.textContent = data.distraction_count;
+
+                    // Update UI status badges
+                    if (data.off_task_seconds > 0) {
+                        statusBadge.className = "status-badge distracted";
+                        statusBadgeText.textContent = `Off-task: ${data.off_task_seconds}s`;
+                        statStatus.textContent = "DISTRACTED";
+                        statStatus.style.color = "var(--accent-pink)";
+                    } else {
+                        statusBadge.className = "status-badge connected";
+                        statusBadgeText.textContent = "Focusing";
+                        statStatus.textContent = "STABLE";
+                        statStatus.style.color = "var(--accent-green)";
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching session stats:", err);
+            }
+        }
+
+        startBtn.addEventListener('click', async () => {
+            startBtn.disabled = true;
+            startBtn.textContent = 'Connecting...';
+            
+            try {
+                // Check if a call instance already exists and destroy it to avoid duplicate instance error
+                const existingFrame = window.DailyIframe.getCallInstance();
+                if (existingFrame) {
+                    try {
+                        await existingFrame.destroy();
+                    } catch (e) {
+                        console.log("Error destroying existing frame:", e);
+                    }
+                }
+                
+                addLog('system', 'Initializing WebRTC connection to coach...');
+                
+                // 1. POST connect to FastAPI server
+                const response = await fetch('/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plan: planInput.value,
+                        persona: personaSelect.value,
+                        subject: subjectInput.value
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error("Failed to connect to backend server.");
+                }
+
+                const { room_url, token } = await response.json();
+                addLog('system', `Room created. Joining session via Daily WebRTC...`);
+
+                // 2. Initialize Daily Call
+                callFrame = window.DailyIframe.createCallObject();
+
+                // Handle headless WebRTC audio tracks
+                callFrame.on('track-started', (evt) => {
+                    if (evt.track.kind === 'audio' && !evt.participant.local) {
+                        const trackId = evt.track.id;
+                        if (!remoteAudioElements[trackId]) {
+                            const audioEl = document.createElement('audio');
+                            audioEl.style.display = 'none';
+                            audioEl.autoplay = true;
+                            audioEl.srcObject = new MediaStream([evt.track]);
+                            document.body.appendChild(audioEl);
+                            remoteAudioElements[trackId] = audioEl;
+                            console.log(`Playing remote audio track: ${trackId}`);
+                        }
+                    }
+                });
+
+                callFrame.on('track-stopped', (evt) => {
+                    const trackId = evt.track.id;
+                    if (remoteAudioElements[trackId]) {
+                        const audioEl = remoteAudioElements[trackId];
+                        audioEl.pause();
+                        audioEl.remove();
+                        delete remoteAudioElements[trackId];
+                        console.log(`Stopped remote audio track: ${trackId}`);
+                    }
+                });
+                
+                // 3. Connect to WebRTC
+                await callFrame.join({ url: room_url, token: token });
+                addLog('system', 'Voice session active. Adjusting audio output...');
+
+                // Toggle visibility
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start Coaching';
+
+                statusBadge.className = 'status-badge connected';
+                statusBadgeText.textContent = 'Active Session';
+                speakerStatus.textContent = 'LISTENING';
+                speakerStatus.style.color = 'var(--text-muted)';
+                visualizerSphere.classList.add('is-speaking');
+
+                // 4. Start Local Audio Analyzer for USER visualization
+                await setupMicAnalyzer();
+
+                // 5. Track Daily Events
+                callFrame.on('participant-updated', (evt) => {
+                    const p = evt.participant;
+                    // If the bot (coach) is talking
+                    if (!p.local && p.audio) {
+                        // Check if speaking (some heuristics or track volume checking)
+                    }
+                });
+
+                callFrame.on('active-speaker-change', (evt) => {
+                    const peerId = evt.activeSpeaker.peerId;
+                    const localParticipant = callFrame.participants().local;
+                    if (peerId !== localParticipant.session_id) {
+                        // Coach is speaking!
+                        speakerStatus.textContent = "COACH TALKING";
+                        speakerStatus.style.color = "var(--primary)";
+                        visualizerSphere.style.borderColor = "var(--primary)";
+                        addLog('coach', 'Coach responds...');
+                    } else {
+                        // User is speaking
+                    }
+                });
+
+                // Start polling stats
+                statsInterval = setInterval(updateStats, 2000);
+
+            } catch (err) {
+                console.error("Coaching start failed:", err);
+                addLog('system', `Failed to start session: ${err.message}`);
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start Coaching';
+            }
+        });
+
+        stopBtn.addEventListener('click', async () => {
+            stopBtn.disabled = true;
+            addLog('system', 'Closing connection and ending session...');
+            
+            // Clean up remote audio elements
+            for (const trackId in remoteAudioElements) {
+                try {
+                    const audioEl = remoteAudioElements[trackId];
+                    audioEl.pause();
+                    audioEl.remove();
+                } catch (e) {
+                    console.error("Error cleaning up audio element:", e);
+                }
+                delete remoteAudioElements[trackId];
+            }
+
+            if (callFrame) {
+                await callFrame.leave();
+                callFrame.destroy();
+                callFrame = null;
+            }
+
+            if (microphoneStream) {
+                microphoneStream.getTracks().forEach(track => track.stop());
+                microphoneStream = null;
+            }
+
+            if (audioCtx) {
+                await audioCtx.close();
+                audioCtx = null;
+            }
+
+            clearInterval(statsInterval);
+
+            addLog('system', 'Session ended successfully. Performance logged.');
+
+            // Toggle visibility
+            stopBtn.style.display = 'none';
+            startBtn.style.display = 'block';
+            stopBtn.disabled = false;
+
+            statusBadge.className = 'status-badge idle';
+            statusBadgeText.textContent = 'Disconnected';
+            speakerStatus.textContent = 'SYSTEM OFFLINE';
+            speakerStatus.style.color = 'var(--text-muted)';
+            visualizerSphere.classList.remove('is-speaking');
+            visualizerSphere.style.transform = 'scale(1)';
+            visualizerSphere.style.boxShadow = '0 0 50px var(--primary-glow)';
+            visualizerSphere.style.borderColor = 'rgba(255,255,255,0.1)';
+
+            // Reset stats
+            statTime.textContent = '00:00';
+            statStreak.textContent = '0m';
+            statDistractions.textContent = '0';
+            statStatus.textContent = 'OFFLINE';
+            statStatus.style.color = 'var(--text-muted)';
+        });
+    </script>
+</body>
+</html>

@@ -45,7 +45,7 @@ Someone studying alone — student, self-learner, professional — who wants an 
 - The user can speak back naturally — the system listens ambiently via Silero VAD
 - No push-to-talk required; the system detects when the user is speaking
 - Barge-in supported: speaking while the coach is talking immediately interrupts it
-- STT (faster-whisper) runs locally — ambient audio never leaves the machine
+- STT (Deepgram Nova-2) runs in the cloud to optimize latency and integrate with the WebRTC pipeline
 
 ### 5. Configurable Persona & Tone
 - Users choose the coach's personality at session start (or in settings)
@@ -89,7 +89,7 @@ Someone studying alone — student, self-learner, professional — who wants an 
 
 ## Non-Functional Requirements
 
-- Runs locally on Windows
-- All core processing (STT) runs offline — no internet required for listening
-- API calls (Claude) only happen for coaching decisions, not continuous monitoring
-- Minimal CPU/memory footprint during idle monitoring
+- Runs on Windows (watchdog client and browser UI) and WSL or Linux (FastAPI bot server)
+- Low-latency response (Time-to-First-Audio < 1.5 seconds)
+- Internet connection required for WebRTC streaming, STT, LLM, and TTS services
+- Minimal CPU/memory footprint on Windows host during idle monitoring

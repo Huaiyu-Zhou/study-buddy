@@ -78,41 +78,42 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 ---
 
 ## Phase 7 — Session Setup Flow
-*Goal: structured start-of-session experience*
+*Goal: structured start-of-session experience via Web UI*
 
-- [ ] `main.py` — first-run check: Whisper model download, API key validation, mic/speaker test
-- [ ] `main.py` — ask for study plan (voice or typed)
-- [ ] `main.py` — ask for persona choice (voice or typed)
-- [ ] Coach confirms plan and begins monitoring
-- [ ] Handle: vague plan (coach asks for clarification), no plan given
+- [x] Web dashboard setup form: allow user to input subject, study plan, and select supervisor persona
+- [x] Send plan and persona via `/connect` API when starting a session
+- [x] Coach dynamically configures its system prompt and begins monitoring based on user selections
 
-**Done when:** cold launch to active monitoring session works end-to-end
+**Done when:** user can launch a customized coaching session from the web browser.
 
 ---
 
-## Phase 8 — Ambiguous Activity Classification & User-Initiated Conversation
-*Goal: handle edge cases the heuristics can't — and let the user start conversations*
+## Phase 8 — WebRTC Transport Integration
+*Goal: low-latency UDP-based audio transport & client-server split*
 
-- [ ] Ambiguous activity: send window snapshot to Claude for classification (anything not in heuristic lists)
-- [ ] "What should I do?" — user-initiated conversation supported at any time, not just in response to interventions
+- [x] Remove PyAudio and local PortAudio dependencies from bot execution environment
+- [x] Implement FastAPI server (`server.py`) inside WSL/Linux to serve frontend and manage Daily.co rooms
+- [x] Refactor `voice_pipeline.py` to use `DailyTransport` and cloud-based `DeepgramSTTService`
+- [x] Build `win_watchdog.py` running on Windows to capture activity and send it to FastAPI server via `/activity`
+- [x] Integrate `daily-js` SDK in `templates/index.html` with interactive voice visualizer ring and live stats dashboard
 
-**Done when:** opening `discord.com` triggers a Claude classification call (not a heuristic hit); speaking unprompted mid-session gets a natural coach response
+**Done when:** voice coaching works with sub-1.5s latency inside the browser, and the Windows watchdog client successfully triggers real-time voice interventions.
 
 ---
 
 ## Phase 9 — Polish & Resilience
 *Goal: handles real-world failure gracefully*
 
-- [ ] Graceful shutdown on Ctrl+C: session summary spoken + written ("62 min studied, 3 distractions")
-- [ ] Error handling: mic not found, API key missing, pywin32 permission errors, Fish Audio rate limit
-- [ ] CLI flags / `.env` for: persona, off-task threshold, cooldown, Whisper model, Fish Audio voice ID
-- [ ] `README.md` — setup instructions
+- [ ] Graceful shutdown: write session summary to MemPalace when user stops coaching
+- [ ] Error handling: API key missing warning, connection failure logs, Daily room limits
+- [ ] CLI flags / `.env` for: default persona, off-task threshold, cooldown, Fish Audio voice ID
+- [ ] `README.md` — setup instructions for client-server WSL setup
 
 ---
 
 ## Parking Lot (post-v1)
-- Session history log + stats dashboard
 - Custom persona builder
-- Support for macOS/Linux
 - Multiple study blocks with break scheduling
 - Browser extension for richer tab context
+- Remote deployment of Bot Server (Linux VPS) with secure WebSocket watchdog tunneling
+

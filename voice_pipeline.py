@@ -25,12 +25,24 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.fish.tts import FishAudioTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.transports.local.audio import (
-    LocalAudioInputTransport,
-    LocalAudioOutputTransport,
-    LocalAudioTransport,
-    LocalAudioTransportParams,
-)
+try:
+    from pipecat.transports.daily.transport import DailyTransport, DailyParams
+    HAS_DAILY = True
+except Exception:
+    HAS_DAILY = False
+
+try:
+    from pipecat.transports.local.audio import (
+        LocalAudioInputTransport,
+        LocalAudioOutputTransport,
+        LocalAudioTransport,
+        LocalAudioTransportParams,
+    )
+    import pyaudio
+    HAS_LOCAL = True
+except Exception:
+    HAS_LOCAL = False
+
 from pipecat.audio.filters.base_audio_filter import BaseAudioFilter
 from pipecat.frames.frames import FilterControlFrame
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -150,8 +162,10 @@ class StudyBuddyVoicePipeline:
     The watchdog can inject interventions at any time via maybe_intervene().
     """
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, room_url: str = "", token: str = "") -> None:
         self.session = session
+        self.room_url = room_url
+        self.token = token
         self.task: Optional[PipelineTask] = None
         self.context: Optional[LLMContext] = None
         self.runner: Optional[PipelineRunner] = None
@@ -214,32 +228,48 @@ class StudyBuddyVoicePipeline:
         """Build and run the Pipecat pipeline.  Blocks until pipeline ends."""
         self.runner = PipelineRunner()
 
-        # --- Transports ---
-        # Devices [12] and [10] are MME-interface Realtek devices that PyAudio can
-        # open at 48 kHz. WASAPI-exclusive devices [14]/[15] cannot be opened by PyAudio.
-        # Pipecat's built-in resampler handles:
-        #   Input:  48000 → 16000 Hz (Deepgram STT requirement)
-        #   Output: 24000 → 48000 Hz (Fish Audio TTS → speakers)
-        import pyaudio
-        pya = pyaudio.PyAudio()
+        # --- Transports (Daily.co WebRTC or Local PyAudio) ---
+        vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=0.3))
 
-        transport_in = LocalAudioInputTransport(
-            pya,
-            params=LocalAudioTransportParams(
-                audio_in_enabled=True,
-                input_device_index=config.AUDIO_INPUT_DEVICE_INDEX,
-                audio_in_sample_rate=config.AUDIO_DEVICE_SAMPLE_RATE,
-                # audio_in_filter=SoftwareGainFilter(multiplier=50.0), # Temporarily disabled
+        if self.room_url:
+            if not HAS_DAILY:
+                raise RuntimeError("Daily WebRTC transport is not installed or supported on this platform.")
+            transport = DailyTransport(
+                room_url=self.room_url,
+                token=self.token,
+                bot_name="Study Buddy Coach",
+                params=DailyParams(
+                    audio_in_enabled=True,
+                    audio_out_enabled=True,
+                    audio_out_sample_rate=config.AUDIO_DEVICE_SAMPLE_RATE,
+                    vad_enabled=True,
+                    vad_analyzer=vad_analyzer,
+                ),
             )
-        )
-        transport_out = LocalAudioOutputTransport(
-            pya,
-            params=LocalAudioTransportParams(
-                audio_out_enabled=True,
-                output_device_index=config.AUDIO_OUTPUT_DEVICE_INDEX,
-                audio_out_sample_rate=config.AUDIO_DEVICE_SAMPLE_RATE,
+            transport_in = transport.input()
+            transport_out = transport.output()
+            user_params = LLMUserAggregatorParams()
+        else:
+            if not HAS_LOCAL:
+                raise RuntimeError("Local PyAudio transport dependencies are missing on this platform.")
+            pya = pyaudio.PyAudio()
+            transport_in = LocalAudioInputTransport(
+                pya,
+                params=LocalAudioTransportParams(
+                    audio_in_enabled=True,
+                    input_device_index=config.AUDIO_INPUT_DEVICE_INDEX,
+                    audio_in_sample_rate=config.AUDIO_DEVICE_SAMPLE_RATE,
+                )
             )
-        )
+            transport_out = LocalAudioOutputTransport(
+                pya,
+                params=LocalAudioTransportParams(
+                    audio_out_enabled=True,
+                    output_device_index=config.AUDIO_OUTPUT_DEVICE_INDEX,
+                    audio_out_sample_rate=config.AUDIO_DEVICE_SAMPLE_RATE,
+                )
+            )
+            user_params = LLMUserAggregatorParams(vad_analyzer=vad_analyzer)
 
         # --- STT (Deepgram Cloud) ---
         stt = DeepgramSTTService(
@@ -282,9 +312,7 @@ class StudyBuddyVoicePipeline:
         # Context aggregators
         user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
             self.context,
-            user_params=LLMUserAggregatorParams(
-                vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.3)),
-            ),
+            user_params=user_params,
         )
 
         # --- Register tool handlers ---
@@ -295,13 +323,13 @@ class StudyBuddyVoicePipeline:
 
         # --- Pipeline wiring ---
         pipeline = Pipeline([
-            transport_in,            # Mic audio frames
+            transport_in,            # WebRTC input or Mic audio frames
             stt,                     # Audio → TranscriptionFrame
             user_aggregator,         # Collects text into LLM user turn
             llm,                     # LLM inference (streaming tokens)
             zh_aggregator,           # Buffer tokens → complete Chinese sentences
             tts,                     # Full sentence → audio (smooth playback)
-            transport_out,           # Audio → speakers
+            transport_out,           # WebRTC output or Speakers
             assistant_aggregator,    # Records assistant turn in context
         ])
 

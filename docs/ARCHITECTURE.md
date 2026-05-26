@@ -30,51 +30,49 @@
 
 ## The Streaming Pipeline
 
-The core voice loop uses **Pipecat** as the orchestrator. Every stage overlaps — TTS begins
-speaking before Claude has finished generating, which brings Time-to-First-Audio to
-roughly 1.5–3 seconds on CPU (VAD finalization + Whisper inference + Claude first token +
-Fish Audio first audio chunk).
+The core voice loop uses **Pipecat** as the orchestrator over a WebRTC connection. Every stage overlaps — TTS begins speaking before the LLM has finished generating, which brings Time-to-First-Audio to roughly 1.0–1.5 seconds (VAD finalization + Deepgram STT cloud inference + OpenAI LLM first token + Fish Audio first audio chunk).
 
 ```
-User speaks
+User speaks (Browser mic)
     │
     ▼
-[Silero VAD] — detects end of speech (~500ms silence)
+[Daily.co WebRTC] — streams audio frame-by-frame via UDP to DailyTransport
     │
     ▼
-[faster-whisper] — local transcription (runs in thread pool, not event loop)
+[Silero VAD] — detects end of speech (~300ms silence)
     │
     ▼
-[Pipecat] — routes text into Claude, manages barge-in
+[Deepgram STT] — cloud-based transcription with low latency
     │
     ▼
-[Claude] — streams tokens word-by-word
+[Pipecat] — routes text into OpenAI LLM, manages barge-in
+    │
+    ▼
+[OpenAI LLM] — streams tokens word-by-word (gpt-4o-mini)
     │
     ▼
 [Fish Audio Turbo] — converts streaming tokens to audio chunks as they arrive
     │
     ▼
-Speaker output (user hears coach almost immediately)
+[Daily.co WebRTC] — streams audio back to user's browser for playback
 ```
 
-**Barge-in:** If the user speaks while the coach is talking, Pipecat kills the TTS stream
-and immediately routes the new speech through the pipeline. The coach stops mid-sentence.
+**Barge-in:** If the user speaks while the coach is talking, the WebRTC audio channel detects the interruption, Pipecat kills the TTS stream, and immediately routes the new speech through the pipeline. The coach stops mid-sentence.
 
 ---
 
 ## Activity Detection (The Watchdog)
 
-A lightweight background thread — separate from the Pipecat pipeline — polls the active
-window every 30 seconds using `pywin32`.
+The watchdog runs locally on the Windows host as `win_watchdog.py`. It polls the active window using `pywin32` every 30 seconds, and sends a snapshot to the server running in WSL/Linux via an HTTP POST request to `/activity`.
 
 ### What it captures
 
 ```python
 {
-  process: "chrome.exe",
-  window_title: "YouTube - lofi hip hop",
-  url: "https://www.youtube.com/watch?v=...",  # if browser, via UI Automation
-  idle_seconds: 3
+  "process": "chrome.exe",
+  "window_title": "YouTube - lofi hip hop",
+  "url": "https://www.youtube.com/watch?v=...",  # if browser, via UI Automation
+  "idle_seconds": 3
 }
 ```
 
@@ -93,16 +91,14 @@ off-task timer — user has stepped away, not distracted.
 
 ### Intervention flow
 
-When the watchdog detects off-task behaviour beyond the threshold, it **injects a system
-message directly into the Pipecat pipeline**:
+When the `/activity` endpoint on the server receives an update and detects off-task behaviour beyond the threshold, it **injects a system message directly into the Pipecat pipeline**:
 
 ```
 [SYSTEM]: User has been on YouTube for 2 minutes. Study plan: revising calculus.
 Persona: Drill Sergeant. Intervene now.
 ```
 
-Claude receives this as a pipeline input and triggers TTS immediately — the coach speaks
-without the user saying anything.
+The LLM receives this as a pipeline input and triggers TTS immediately — the coach speaks to the user via the browser's WebRTC audio connection without the user having to say anything.
 
 ---
 
@@ -209,44 +205,40 @@ uninterrupted), the coach gives brief encouragement unprompted.
 ## Key Design Decisions
 
 **Why Pipecat?**
-It handles the hardest parts of voice pipelines — streaming, barge-in, pipeline
-orchestration — without custom plumbing. Using it means we don't reinvent a voice framework.
+It handles the hardest parts of voice pipelines — streaming, barge-in, pipeline orchestration — without custom plumbing. Using it means we don't reinvent a voice framework.
 
-**Why faster-whisper locally?**
-STT runs offline for privacy. Local Whisper means ambient listening doesn't send audio to
-any cloud service. Use `base` model (74MB, ~200MB RAM) as default — transcribes short
-phrases in 0.5–2s on CPU. Must run in a thread pool executor, not the asyncio event loop.
+**Why WebRTC (Daily.co)?**
+Browser-based WebRTC provides high audio quality, native Echo Cancellation, and leverages UDP instead of TCP, reducing audio latency and jitter. It also completely removes local audio device (PyAudio/PortAudio) installation headaches.
+
+**Why Deepgram for STT?**
+Moving STT to the cloud (Deepgram) allows for fast and highly accurate transcriptions (Nova-2 model) at a fraction of the response latency of local Whisper on CPU.
 
 **Why Fish Audio for TTS?**
-Voice quality matters for a coaching persona people will hear for hours. Fish Audio Turbo
-supports streaming, so audio begins playing before the full response is generated. Requires
-internet + `FISH_AUDIO_API_KEY`. Free tier: 10,000 chars/month.
+Voice quality matters for a coaching persona people will hear for hours. Fish Audio Turbo supports streaming, so audio begins playing before the full response is generated. Requires internet + `FISH_AUDIO_API_KEY`. Free tier: 10,000 chars/month.
 
 **Why MemPalace over a simple conversation log?**
-A flat log grows unbounded and doesn't support semantic retrieval. MemPalace lets the coach
-pull *relevant* history efficiently — what happened last Tuesday in calculus, not the entire
-session archive. Verbatim storage means nothing is lost to summarisation.
+A flat log grows unbounded and doesn't support semantic retrieval. MemPalace lets the coach pull *relevant* history efficiently — what happened last Tuesday in calculus, not the entire session archive. Verbatim storage means nothing is lost to summarisation.
 
-**Why Claude for coaching, not rule-based logic?**
-Rules are brittle. Claude can understand that a YouTube video titled "3Blue1Brown — Calculus
-Explained" might be on-task. Context matters, and rules can't encode it.
+**Why GPT-4o-mini for coaching, not rule-based logic?**
+Rules are brittle. An LLM can understand that a YouTube video titled "3Blue1Brown — Calculus Explained" might be on-task. Context matters, and rules can't encode it.
 
 ---
 
 ## Tech Stack
 
-| Concern | Library | Notes |
+| Concern | Library / Tool | Notes |
 |---|---|---|
-| Voice pipeline | `pipecat` | Orchestrates STT → LLM → TTS, handles barge-in |
-| Active window | `pywin32` | Windows only |
+| Voice transport | `pipecat-ai[daily]` | Connects to Daily.co room for WebRTC audio transport |
+| WebRTC Client | `daily-js` (Browser) | Establishes low-latency audio connection in browser |
+| Web Server | `fastapi` + `uvicorn` | Serves frontend & connects client to bot session |
+| Active window | `pywin32` | Windows host client only |
 | Browser URL | `pywin32` UI Automation | Chromium browsers, fragile — fallback to title |
-| Idle detection | `pywin32` `GetLastInputInfo` | |
-| STT | `faster-whisper` + Silero VAD | Local, CPU-capable, thread pool executor |
-| AI coaching | `anthropic` SDK | Claude Sonnet (latest) |
-| TTS | `fish_audio` (Turbo) | Streaming, API key required |
+| Idle detection | `pywin32` `GetLastInputInfo` | Windows host client only |
+| STT | `deepgram` (Nova-2) | Cloud-based, low latency, smart formatting |
+| AI coaching | `openai` (gpt-4o-mini) | Model configured for streaming turn-taking and tools |
+| TTS | `fish_audio` (s2-pro) | Streaming, API key required |
 | Long-term memory | `mempalace` | Local, ChromaDB + SQLite, verbatim storage |
-| Audio playback | `pygame` | Cross-platform |
-| Async runtime | `asyncio` | Concurrent watchdog + pipeline |
+| Async runtime | `asyncio` | Runs on bot backend for pipeline orchestration |
 | Config | `python-dotenv` | API keys from .env |
 
 ---
@@ -254,7 +246,6 @@ Explained" might be on-task. Context matters, and rules can't encode it.
 ## Requirements
 
 - **Python:** 3.10+
-- **OS:** Windows 10 or Windows 11 (pywin32 is Windows-only)
-- **Permissions:** pywin32 UI Automation (browser URL extraction) may require running as administrator
-- **API keys:** `ANTHROPIC_API_KEY` (required), `FISH_AUDIO_API_KEY` (required for TTS)
-- **Internet:** required for Claude API calls and Fish Audio TTS; STT runs fully offline
+- **OS:** Windows 10 or Windows 11 (for watchdog client); WSL or Linux/macOS (for FastAPI server and Daily transport bot)
+- **API keys:** `DAILY_API_KEY`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `FISH_AUDIO_API_KEY`
+- **Internet:** required for WebRTC streaming, STT, LLM, and TTS services

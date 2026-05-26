@@ -18,3 +18,5 @@ entities.json
 .gemini/
 scratch/
 *.log
+get-pip.py
+

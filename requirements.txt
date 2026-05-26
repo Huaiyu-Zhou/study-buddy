@@ -1,14 +1,19 @@
 # Core (Phase 1-2)
-pywin32==306
+pywin32==306; sys_platform == "win32"
 psutil==5.9.8
 python-dotenv==1.0.1
-comtypes==1.4.8
+comtypes==1.4.8; sys_platform == "win32"
 
 # Phase 3
 openai==1.75.0
 
 # Phase 4 & 5 — Pipecat pipeline (replaces manual audio plumbing)
-pipecat-ai[deepgram,fish,local,silero]>=0.0.54
+pipecat-ai[daily,deepgram,fish,silero]==1.1.0
+
+# Phase 8 — WebRTC server
+fastapi>=0.115.0
+uvicorn>=0.34.0
+aiohttp>=3.11.0
 
 # Phase 6
 mempalace>=3.3.0

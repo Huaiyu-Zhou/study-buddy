@@ -100,5 +100,5 @@ class TestPersist:
         mock_subprocess.run.assert_called_once()
         call_args = mock_subprocess.run.call_args
         cmd = call_args[0][0]
-        assert "mempalace" in cmd[0]
+        assert "mempalace" in cmd
         assert "mine" in cmd

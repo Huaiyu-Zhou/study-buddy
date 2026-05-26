@@ -14,6 +14,10 @@ DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL: str = "gpt-4o-mini"
 
+# Daily.co WebRTC (Phase 8 - WebRTC Transport)
+DAILY_API_KEY: str = os.getenv("DAILY_API_KEY", "")
+DAILY_API_URL: str = "https://api.daily.co/v1"
+
 # Deepgram (Phase 7 - Cloud STT)
 DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "")
 DEEPGRAM_MODEL: str = "nova-2"
