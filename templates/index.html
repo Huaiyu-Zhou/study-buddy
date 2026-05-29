@@ -3,23 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Study Buddy - Professional Coaching Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+    <title>Study Buddy — Professional Focus Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@daily-co/daily-js"></script>
     <style>
         :root {
-            --bg-gradient: radial-gradient(circle at center, #181427 0%, #0b0914 100%);
-            --panel-bg: rgba(22, 18, 38, 0.7);
-            --border-color: rgba(138, 75, 243, 0.25);
-            --primary: #8a4bf3;
-            --primary-glow: rgba(138, 75, 243, 0.5);
-            --accent-cyan: #00e5ff;
-            --accent-cyan-glow: rgba(0, 229, 255, 0.4);
-            --accent-pink: #ff007f;
-            --accent-pink-glow: rgba(255, 0, 127, 0.4);
-            --accent-green: #39ff14;
-            --text-main: #f3f0ff;
-            --text-muted: #9f9baa;
+            --bg-main: #f8fafc;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --primary: #0f172a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-indigo: #6366f1;
+            --accent-purple: #8b5cf6;
+            --accent-amber: #f59e0b;
+            --accent-crimson: #ef4444;
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         * {
@@ -30,392 +32,734 @@
 
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--bg-gradient);
+            background-color: var(--bg-main);
             color: var(--text-main);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow-x: hidden;
             justify-content: space-between;
+            overflow-x: hidden;
         }
 
         header {
-            padding: 24px 40px;
+            padding: 20px 40px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            background: var(--card-bg);
             border-bottom: 1px solid var(--border-color);
-            background: rgba(11, 9, 20, 0.5);
-            backdrop-filter: blur(10px);
         }
 
         .logo {
-            font-family: 'Orbitron', sans-serif;
-            font-weight: 900;
-            font-size: 1.5rem;
-            letter-spacing: 2px;
-            background: linear-gradient(90deg, var(--accent-cyan), var(--primary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-transform: uppercase;
-            text-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
-        }
-
-        .status-badge {
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.85rem;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 1.25rem;
+            letter-spacing: -0.5px;
+            color: var(--text-main);
             display: flex;
             align-items: center;
             gap: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+        }
+
+        .logo::before {
+            content: '';
+            display: block;
+            width: 12px;
+            height: 12px;
+            background: var(--accent-blue);
+            border-radius: 50%;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn-webhook {
+            background: transparent;
+            color: var(--text-muted);
             border: 1px solid var(--border-color);
-            background: rgba(255, 255, 255, 0.03);
-            transition: all 0.3s ease;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .btn-webhook:hover {
+            color: var(--text-main);
+            border-color: var(--text-main);
+            background: #f8fafc;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #f1f5f9;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            transition: var(--transition-smooth);
         }
 
         .status-badge .dot {
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background: var(--text-muted);
-            box-shadow: 0 0 8px var(--text-muted);
         }
-
-        .status-badge.idle {
-            color: var(--text-muted);
-            border-color: rgba(255, 255, 255, 0.1);
-        }
-        .status-badge.idle .dot { background: var(--text-muted); box-shadow: 0 0 8px var(--text-muted); }
 
         .status-badge.connected {
-            color: var(--accent-cyan);
-            border-color: var(--accent-cyan);
-            box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+            color: var(--accent-blue);
+            border-color: #bfdbfe;
+            background: #eff6ff;
         }
-        .status-badge.connected .dot { background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); }
+        .status-badge.connected .dot { background: var(--accent-blue); }
 
         .status-badge.distracted {
-            color: var(--accent-pink);
-            border-color: var(--accent-pink);
-            box-shadow: 0 0 15px rgba(255, 0, 127, 0.15);
-            animation: pulse-border 1.5s infinite alternate;
+            color: var(--accent-crimson);
+            border-color: #fca5a5;
+            background: #fef2f2;
+            animation: pulse-border-red 2s infinite;
         }
-        .status-badge.distracted .dot { background: var(--accent-pink); box-shadow: 0 0 8px var(--accent-pink); }
+        .status-badge.distracted .dot { background: var(--accent-crimson); }
 
         main {
             flex-grow: 1;
-            max-width: 1400px;
+            max-width: 1200px;
             width: 100%;
             margin: 0 auto;
             padding: 40px;
             display: grid;
-            grid-template-columns: 380px 1fr;
+            grid-template-columns: 480px 1fr;
             gap: 40px;
         }
 
-        .sidebar {
+        .panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: var(--card-shadow);
+            transition: var(--transition-smooth);
+        }
+
+        .left-col {
             display: flex;
             flex-direction: column;
             gap: 30px;
         }
 
-        .panel {
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 30px;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
-        }
-
-        .panel:hover {
-            border-color: rgba(138, 75, 243, 0.4);
+        .right-col {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
         }
 
         .panel-title {
-            font-family: 'Orbitron', sans-serif;
+            font-family: 'Outfit', sans-serif;
             font-size: 1rem;
             font-weight: 700;
-            letter-spacing: 1px;
-            margin-bottom: 20px;
-            text-transform: uppercase;
             color: var(--text-main);
-            border-left: 3px solid var(--primary);
-            padding-left: 10px;
-        }
-
-        .form-group {
             margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
-        .form-group input, .form-group select {
+        .goal-input-container {
+            margin-bottom: 24px;
+        }
+
+        .goal-input-container label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .goal-input {
             width: 100%;
-            background: rgba(11, 9, 20, 0.6);
+            background: #f8fafc;
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            padding: 12px 16px;
+            padding: 10px 14px;
             color: var(--text-main);
-            font-size: 0.95rem;
-            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
             outline: none;
-            transition: all 0.3s ease;
+            transition: var(--transition-smooth);
         }
 
-        .form-group input:focus, .form-group select:focus {
-            border-color: var(--accent-cyan);
-            box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+        .goal-input:focus {
+            border-color: var(--accent-blue);
+            background: #fff;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
         }
 
-        .btn {
-            width: 100%;
-            padding: 16px;
-            border-radius: 12px;
-            border: none;
-            font-family: 'Orbitron', sans-serif;
-            font-weight: 700;
-            font-size: 1rem;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        /* Timer Circular Progress styling */
+        .timer-wrapper {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
+            margin: 30px auto;
+            position: relative;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.75);
+            border: 3px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 
+                0 10px 30px rgba(15, 23, 42, 0.04),
+                inset 0 10px 30px rgba(255, 255, 255, 0.6),
+                0 0 1px rgba(15, 23, 42, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            overflow: hidden;
+            cursor: pointer;
+            transition: var(--transition-smooth);
         }
 
-        .btn-start {
-            background: linear-gradient(135deg, var(--primary) 0%, #a272ff 100%);
-            color: #fff;
-            box-shadow: 0 4px 20px rgba(138, 75, 243, 0.4);
+        .timer-wrapper:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+            box-shadow: 
+                0 12px 35px rgba(15, 23, 42, 0.06),
+                inset 0 10px 30px rgba(255, 255, 255, 0.8),
+                0 0 15px rgba(59, 130, 246, 0.1);
         }
 
-        .btn-start:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(138, 75, 243, 0.6);
-            filter: brightness(1.1);
+        .timer-wrapper.active {
+            border-color: rgba(59, 130, 246, 0.55);
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 
+                0 12px 35px rgba(59, 130, 246, 0.08),
+                inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                0 0 20px rgba(59, 130, 246, 0.15);
         }
 
-        .btn-start:active {
-            transform: translateY(1px);
-        }
-
-        .btn-stop {
-            background: linear-gradient(135deg, #cc085e 0%, var(--accent-pink) 100%);
-            color: #fff;
-            box-shadow: 0 4px 20px rgba(255, 0, 127, 0.4);
-            display: none;
-        }
-
-        .btn-stop:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(255, 0, 127, 0.6);
-            filter: brightness(1.1);
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
-        .stat-card {
-            background: rgba(11, 9, 20, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
+        .timer-content {
+            position: absolute;
             display: flex;
             flex-direction: column;
+            align-items: center;
             justify-content: center;
+            text-align: center;
+            z-index: 2;
+            pointer-events: none; /* Let mouse events pass to canvas */
         }
 
-        .stat-value {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.8rem;
-            font-weight: 700;
-            margin-bottom: 4px;
-            color: var(--accent-cyan);
-            text-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
-        }
-
-        .stat-card.distractions .stat-value {
-            color: var(--accent-pink);
-            text-shadow: 0 0 10px rgba(255, 0, 127, 0.2);
-        }
-
-        .stat-label {
+        .timer-status {
             font-size: 0.75rem;
+            font-weight: 600;
             color: var(--text-muted);
             text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .timer-display-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto; /* Re-enable pointer events for input */
+        }
+
+        .custom-duration-input {
+            font-family: 'Outfit', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+            border: none;
+            background: transparent;
+            outline: none;
+            text-align: center;
+            width: 140px;
+            border-bottom: 2px dashed rgba(15, 23, 42, 0.15);
+            transition: var(--transition-smooth);
+        }
+
+        .custom-duration-input:focus {
+            border-bottom-color: var(--accent-blue);
+        }
+
+        .custom-duration-input::-webkit-outer-spin-button,
+        .custom-duration-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .custom-duration-input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        .duration-input-wrapper {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .duration-unit {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-muted);
             letter-spacing: 0.5px;
         }
 
-        .main-content {
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
+        .timer-display {
+            font-family: 'Outfit', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+            line-height: 1;
+            letter-spacing: -0.5px;
         }
 
-        .coach-viewer {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            min-height: 400px;
-            position: relative;
-        }
-
-        /* Voice Sphere Visualizer */
-        .voice-sphere-container {
-            width: 250px;
-            height: 250px;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .voice-sphere {
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            background: radial-gradient(circle, var(--primary) 0%, rgba(11, 9, 20, 0.8) 100%);
-            box-shadow: 0 0 50px var(--primary-glow);
-            z-index: 10;
-            transition: all 0.3s ease;
-            position: relative;
-            border: 2px solid rgba(255,255,255,0.1);
-        }
-
-        .voice-ring {
-            position: absolute;
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            border: 2px solid var(--accent-cyan);
-            box-shadow: 0 0 30px var(--accent-cyan-glow);
-            animation: pulse-ring 2.5s infinite ease-out;
-            opacity: 0;
-        }
-
-        .voice-ring:nth-child(2) {
-            animation-delay: 0.8s;
-            border-color: var(--primary);
-            box-shadow: 0 0 30px var(--primary-glow);
-        }
-
-        .voice-ring:nth-child(3) {
-            animation-delay: 1.6s;
-            border-color: var(--accent-pink);
-            box-shadow: 0 0 30px var(--accent-pink-glow);
-        }
-
-        /* Transcription / Dialog box */
-        .console-panel {
-            max-height: 240px;
-            height: 240px;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .console-logs {
-            flex-grow: 1;
-            overflow-y: auto;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.9rem;
-            line-height: 1.6;
-            padding-right: 10px;
-        }
-
-        .log-entry {
-            margin-bottom: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-            padding-bottom: 8px;
-            animation: fade-in 0.3s ease-out;
-        }
-
-        .log-time {
-            font-family: 'Orbitron', sans-serif;
+        .timer-subtext {
             font-size: 0.75rem;
             color: var(--text-muted);
-            margin-right: 8px;
+            margin-top: 8px;
         }
 
-        .log-role {
+        /* Action control buttons */
+        .controls {
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .btn-action {
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
             font-weight: 600;
-            margin-right: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: var(--transition-smooth);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
-        .log-role.user { color: var(--accent-cyan); }
-        .log-role.coach { color: var(--primary); }
-        .log-role.system { color: var(--accent-pink); }
+        .btn-start-study {
+            background: var(--primary);
+            color: #fff;
+        }
 
-        /* Scrollbar styling */
-        ::-webkit-scrollbar {
+        .btn-start-study:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-stop-study {
+            background: #fef2f2;
+            color: var(--accent-crimson);
+            border: 1px solid #fca5a5;
+        }
+
+        .btn-stop-study:hover {
+            background: #fee2e2;
+            transform: translateY(-1px);
+        }
+
+        .laptop-control-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .laptop-control-label {
+            font-size: 0.85rem;
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 22px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #cbd5e1;
+            transition: .3s ease;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s ease;
+            border-radius: 50%;
+        }
+
+        .switch input:checked + .slider {
+            background-color: var(--text-main);
+        }
+
+        .switch input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        /* Calendar grid styling */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 6px;
+            max-width: 240px;
+            margin: 0 auto 15px auto;
+        }
+
+        .calendar-day-header {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .calendar-cell {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            background-color: #f1f5f9;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            border: 2px solid transparent;
+            position: relative;
+        }
+
+        .calendar-cell:hover {
+            transform: scale(1.15);
+            z-index: 10;
+        }
+
+        .calendar-cell.active {
+            border-color: var(--text-main);
+        }
+
+        /* Calendar heat steps */
+        .heat-0 { background-color: #f1f5f9; }
+        .heat-1 { background-color: #e0f2fe; }
+        .heat-2 { background-color: #7dd3fc; }
+        .heat-3 { background-color: #0ea5e9; }
+        .heat-4 { background-color: #0369a1; }
+
+        .calendar-legend {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 12px;
+        }
+
+        .legend-box {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+        }
+
+        /* Time Spent List detail card styling */
+        .activity-details-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 280px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .empty-activity {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            padding: 30px 0;
+        }
+
+        .activity-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .activity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        .activity-name-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .activity-dot {
             width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #cbd5e1;
         }
-        ::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1);
+
+        .activity-dot.study { background: var(--accent-green); }
+        .activity-dot.distraction { background: var(--accent-crimson); }
+
+        .activity-time {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            color: var(--text-main);
         }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(138, 75, 243, 0.3);
-            border-radius: 3px;
+
+        .activity-bar-bg {
+            width: 100%;
+            height: 4px;
+            background: #f1f5f9;
+            border-radius: 2px;
+            overflow: hidden;
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(138, 75, 243, 0.5);
+
+        .activity-bar-fill {
+            height: 100%;
+            background: var(--text-muted);
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+        .activity-bar-fill.study { background: var(--accent-green); }
+        .activity-bar-fill.distraction { background: var(--accent-crimson); }
+
+        /* Modal dialog layout */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.3);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: var(--transition-smooth);
+            z-index: 100;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border-radius: 16px;
+            width: 500px;
+            max-width: 90%;
+            padding: 30px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            transform: translateY(20px);
+            transition: var(--transition-smooth);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .modal-overlay.open .modal-content {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 1.25rem;
+        }
+
+        .modal-body {
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: var(--text-muted);
+        }
+
+        .modal-body p {
+            margin-bottom: 12px;
+        }
+
+        .modal-body h4 {
+            color: var(--text-main);
+            margin: 16px 0 6px 0;
+            font-weight: 600;
+        }
+
+        .modal-body ol {
+            margin-left: 18px;
+            margin-bottom: 12px;
+        }
+
+        .modal-body code {
+            font-family: monospace;
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--accent-crimson);
+            word-break: break-all;
+        }
+
+        /* State rings */
+        .timer-wrapper.state-blue {
+            border-color: rgba(59, 130, 246, 0.45);
+            box-shadow: 
+                0 12px 35px rgba(59, 130, 246, 0.08),
+                inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                0 0 20px rgba(59, 130, 246, 0.15);
+        }
+        .timer-wrapper.state-green {
+            border-color: rgba(16, 185, 129, 0.45);
+            animation: breathe-green 3s infinite ease-in-out;
+        }
+        .timer-wrapper.state-indigo {
+            border-color: rgba(99, 102, 241, 0.55);
+            box-shadow: 
+                0 12px 35px rgba(99, 102, 241, 0.1),
+                inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                0 0 25px rgba(99, 102, 241, 0.2);
+        }
+        .timer-wrapper.state-purple {
+            border-color: rgba(139, 92, 246, 0.6);
+            box-shadow: 
+                0 12px 35px rgba(139, 92, 246, 0.15),
+                inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                0 0 30px rgba(139, 92, 246, 0.25);
+            animation: breathe-purple 2s infinite ease-in-out;
+        }
+        .timer-wrapper.state-completed {
+            border-color: rgba(245, 158, 11, 0.7);
+            box-shadow: 
+                0 12px 40px rgba(245, 158, 11, 0.2),
+                inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                0 0 35px rgba(245, 158, 11, 0.35);
+            animation: celebrate-gold 1.5s infinite alternate ease-in-out;
         }
 
         /* Animations */
-        @keyframes pulse-ring {
+        @keyframes pulse-border-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        @keyframes breathe-green {
+            0%, 100% {
+                box-shadow: 
+                    0 12px 35px rgba(16, 185, 129, 0.08),
+                    inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                    0 0 15px rgba(16, 185, 129, 0.1);
+            }
+            50% {
+                box-shadow: 
+                    0 12px 35px rgba(16, 185, 129, 0.15),
+                    inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                    0 0 28px rgba(16, 185, 129, 0.35);
+            }
+        }
+
+        @keyframes breathe-purple {
+            0%, 100% {
+                box-shadow: 
+                    0 12px 35px rgba(139, 92, 246, 0.12),
+                    inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                    0 0 20px rgba(139, 92, 246, 0.2);
+            }
+            50% {
+                box-shadow: 
+                    0 12px 35px rgba(139, 92, 246, 0.25),
+                    inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                    0 0 35px rgba(139, 92, 246, 0.45);
+            }
+        }
+
+        @keyframes celebrate-gold {
             0% {
                 transform: scale(1);
-                opacity: 0.8;
+                box-shadow: 
+                    0 12px 40px rgba(245, 158, 11, 0.15),
+                    inset 0 10px 30px rgba(255, 255, 255, 0.7),
+                    0 0 25px rgba(245, 158, 11, 0.25);
             }
             100% {
-                transform: scale(2.2);
-                opacity: 0;
+                transform: scale(1.03);
+                box-shadow: 
+                    0 16px 45px rgba(245, 158, 11, 0.35),
+                    inset 0 10px 30px rgba(255, 255, 255, 0.8),
+                    0 0 45px rgba(245, 158, 11, 0.55);
             }
         }
 
-        @keyframes pulse-border {
-            from { border-color: rgba(255, 0, 127, 0.3); }
-            to { border-color: rgba(255, 0, 127, 1); }
-        }
-
-        @keyframes fade-in {
-            from { opacity: 0; transform: translateY(5px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Speaker speaking visual */
-        .is-speaking {
-            animation: sphere-grow 1s infinite alternate ease-in-out;
-        }
-
-        @keyframes sphere-grow {
-            from {
-                transform: scale(1);
-                box-shadow: 0 0 50px var(--primary-glow);
-            }
-            to {
-                transform: scale(1.15);
-                box-shadow: 0 0 80px rgba(138, 75, 243, 0.8), 0 0 20px var(--accent-cyan);
-            }
+        footer {
+            padding: 20px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            background: var(--card-bg);
         }
     </style>
 </head>
@@ -423,97 +767,124 @@
 
     <header>
         <div class="logo">Study Buddy Coach</div>
-        <div id="statusBadge" class="status-badge idle">
-            <span class="dot"></span>
-            <span class="text">Disconnected</span>
+        <div class="header-actions">
+            <button class="btn-webhook" id="openWebhookBtn">📱 Webhook Guide</button>
+            <div id="statusBadge" class="status-badge">
+                <span class="dot"></span>
+                <span class="text">Offline</span>
+            </div>
         </div>
     </header>
 
     <main>
-        <div class="sidebar">
-            <!-- Setup Session -->
-            <div class="panel" id="configPanel">
-                <div class="panel-title">Coaching Setup</div>
-                <div class="form-group">
-                    <label for="subjectInput">Subject Wing</label>
-                    <input type="text" id="subjectInput" value="calculus" placeholder="e.g. calculus, physics, coding">
-                </div>
-                <div class="form-group">
-                    <label for="planInput">Study Plan Goal</label>
-                    <input type="text" id="planInput" value="practice integrals and limits" placeholder="What are you studying?">
-                </div>
-                <div class="form-group">
-                    <label for="personaSelect">Supervisor Persona</label>
-                    <select id="personaSelect">
-                        <option value="lady_s">Lady S (Cold & Strict Dominatrix)</option>
-                        <option value="drill_sergeant">Drill Sergeant (High Pressure)</option>
-                        <option value="sarcastic_genius">Sarcastic Genius (Snarky Critic)</option>
-                    </select>
-                </div>
-                <button id="startBtn" class="btn btn-start">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                    Start Coaching
-                </button>
-                <button id="stopBtn" class="btn btn-stop">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                    Stop Coaching
-                </button>
-            </div>
-
-            <!-- Stats Dashboard -->
+        <!-- Left column: main progress bar -->
+        <div class="left-col">
             <div class="panel">
-                <div class="panel-title">Session Diagnostics</div>
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-value" id="statTime">00:00</div>
-                        <div class="stat-label">Elapsed Time</div>
+                <div class="panel-title">Focus Session</div>
+                
+                <div class="goal-input-container">
+                    <label for="planInput">Study Goal</label>
+                    <input type="text" id="planInput" class="goal-input" value="Practice math problems" placeholder="e.g. Write essay, Code API">
+                </div>
+
+                <div class="timer-wrapper" id="timerWrapper">
+                    <canvas id="fluidCanvas" width="640" height="640" style="position: absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; z-index:1; pointer-events:none;"></canvas>
+                    <div class="timer-content">
+                        <div class="timer-status" id="timerStatus">READY TO STUDY</div>
+                        <div id="timerDisplayContainer" class="timer-display-container">
+                            <div class="duration-input-wrapper" id="durationInputWrapper">
+                                <input type="number" id="durationMinutesInput" class="custom-duration-input" value="25" min="1" max="999">
+                                <span class="duration-unit">MIN</span>
+                            </div>
+                            <span class="timer-display" id="timerDisplay" style="display: none;">25:00</span>
+                        </div>
+                        <div class="timer-subtext" id="timerSubtext">Set Goal Below</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="statStreak">0m</div>
-                        <div class="stat-label">Focus Streak</div>
-                    </div>
-                    <div class="stat-card distractions">
-                        <div class="stat-value" id="statDistractions">0</div>
-                        <div class="stat-label">Distractions</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="statStatus">STABLE</div>
-                        <div class="stat-label">Mind State</div>
-                    </div>
+                </div>
+
+                <div class="controls">
+                    <button id="startBtn" class="btn-action btn-start-study">Start Study</button>
+                    <button id="stopBtn" class="btn-action btn-stop-study" style="display: none;">Stop Study</button>
+                </div>
+
+                <div class="laptop-control-container">
+                    <span class="laptop-control-label">Laptop Control (Auto-Close apps)</span>
+                    <label class="switch">
+                        <input type="checkbox" id="controlLaptopToggle" checked>
+                        <span class="slider"></span>
+                    </label>
                 </div>
             </div>
         </div>
 
-        <div class="main-content">
-            <!-- Center voice coach visualizer -->
-            <div class="panel coach-viewer">
-                <div class="voice-sphere-container">
-                    <div class="voice-ring"></div>
-                    <div class="voice-ring"></div>
-                    <div class="voice-ring"></div>
-                    <div class="voice-sphere" id="visualizerSphere"></div>
+        <!-- Right column: study history calendar + list breakdown -->
+        <div class="right-col">
+            <!-- Calendar Card -->
+            <div class="panel">
+                <div class="panel-title">Focus Log (Past 28 Days)</div>
+                <div class="calendar-grid" id="calendarGrid">
+                    <!-- Column titles (Sun to Sat) -->
+                    <div class="calendar-day-header">S</div>
+                    <div class="calendar-day-header">M</div>
+                    <div class="calendar-day-header">T</div>
+                    <div class="calendar-day-header">W</div>
+                    <div class="calendar-day-header">T</div>
+                    <div class="calendar-day-header">F</div>
+                    <div class="calendar-day-header">S</div>
+                    <!-- Cells generated via Javascript -->
                 </div>
-                <div style="margin-top: 30px; font-family: 'Orbitron', sans-serif; font-size: 0.9rem; color: var(--text-muted); letter-spacing: 1px;" id="speakerStatus">
-                    SYSTEM OFFLINE
+                <div class="calendar-legend">
+                    <span>Less</span>
+                    <div class="legend-box heat-0"></div>
+                    <div class="legend-box heat-1"></div>
+                    <div class="legend-box heat-2"></div>
+                    <div class="legend-box heat-3"></div>
+                    <div class="legend-box heat-4"></div>
+                    <span>More</span>
                 </div>
             </div>
 
-            <!-- Speech log console -->
-            <div class="panel console-panel">
-                <div class="panel-title">Coaching Transcript</div>
-                <div class="console-logs" id="consoleLogs">
-                    <div class="log-entry">
-                        <span class="log-time">00:00:00</span>
-                        <span class="log-role system">System:</span>
-                        <span class="log-text">Ready to monitor. Click Start Coaching to begin.</span>
-                    </div>
+            <!-- Details Card -->
+            <div class="panel">
+                <div class="panel-title" id="detailsTitle">Time Spent Details</div>
+                <div class="activity-details-container" id="activityDetails">
+                    <div class="empty-activity">Click a day on the calendar to view application statistics.</div>
                 </div>
             </div>
         </div>
     </main>
 
-    <footer style="padding: 20px; text-align: center; font-size: 0.75rem; color: var(--text-muted); border-top: 1px solid var(--border-color); background: rgba(11, 9, 20, 0.4);">
-        AI Study Buddy — Dynamic WebRTC Audio Coaching Interface
+    <!-- Webhook Modal Overlay -->
+    <div class="modal-overlay" id="webhookModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📱 Mobile Phone Guard Webhook Setup</div>
+                <button class="modal-close" id="closeWebhookBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Configure a webhook in less than a minute to alert the Study Coach when you unlock your phone or launch distracting apps:</p>
+                
+                <h4>iOS (iPhone Shortcuts)</h4>
+                <ol>
+                    <li>Open the <strong>Shortcuts</strong> app and select the <strong>Automation</strong> tab &rarr; Click <strong>+</strong>.</li>
+                    <li>Choose <strong>App</strong> &rarr; Select distracting apps (e.g. WeChat, TikTok, Instagram).</li>
+                    <li>Check "Is Opened", select <strong>Run Immediately</strong>.</li>
+                    <li>Add action: <strong>Get Contents of URL</strong>.</li>
+                    <li>Enter this URL: <br><code id="webhookUrlExample">http://{{LOCAL_IP}}:7860/phone_activity?app=WeChat</code></li>
+                </ol>
+
+                <h4>Android (MacroDroid)</h4>
+                <ol>
+                    <li>Add Macro &rarr; Trigger: <strong>Application Launched</strong> (select apps) or <strong>Screen Unlocked</strong>.</li>
+                    <li>Action: <strong>HTTP GET</strong>.</li>
+                    <li>Enter the same URL structure replacing the IP with your computer's local IP address.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        AI Study Buddy — Dynamic Focus & WebRTC Coaching Dashboard
     </footer>
 
     <script>
@@ -521,101 +892,393 @@
         const stopBtn = document.getElementById('stopBtn');
         const statusBadge = document.getElementById('statusBadge');
         const statusBadgeText = statusBadge.querySelector('.text');
-        const visualizerSphere = document.getElementById('visualizerSphere');
-        const speakerStatus = document.getElementById('speakerStatus');
-        const consoleLogs = document.getElementById('consoleLogs');
         
-        // Form inputs
-        const subjectInput = document.getElementById('subjectInput');
         const planInput = document.getElementById('planInput');
-        const personaSelect = document.getElementById('personaSelect');
+        const controlLaptopToggle = document.getElementById('controlLaptopToggle');
+        
+        const openWebhookBtn = document.getElementById('openWebhookBtn');
+        const closeWebhookBtn = document.getElementById('closeWebhookBtn');
+        const webhookModal = document.getElementById('webhookModal');
 
-        // Stats elements
-        const statTime = document.getElementById('statTime');
-        const statStreak = document.getElementById('statStreak');
-        const statDistractions = document.getElementById('statDistractions');
-        const statStatus = document.getElementById('statStatus');
+        // Timer references
+        const timerWrapper = document.getElementById('timerWrapper');
+        const fluidCanvas = document.getElementById('fluidCanvas');
+        const timerStatus = document.getElementById('timerStatus');
+        const timerSubtext = document.getElementById('timerSubtext');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const durationInputWrapper = document.getElementById('durationInputWrapper');
+        const durationMinutesInput = document.getElementById('durationMinutesInput');
+
+        // Calendar / Details references
+        const calendarGrid = document.getElementById('calendarGrid');
+        const detailsTitle = document.getElementById('detailsTitle');
+        const activityDetails = document.getElementById('activityDetails');
 
         let callFrame = null;
         let statsInterval = null;
-        let audioCtx = null;
-        let analyzer = null;
-        let microphoneStream = null;
-        let dataArray = null;
         let remoteAudioElements = {};
+        
+        let selectedDurationMinutes = parseInt(durationMinutesInput.value) || 25;
+        let studyHistory = {};
+        let selectedDateStr = new Date().toISOString().split('T')[0];
 
-        function addLog(role, text) {
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
+        // Track time updates locally
+        let elapsedSeconds = 0;
+
+        // Modal triggers
+        openWebhookBtn.addEventListener('click', () => webhookModal.classList.add('open'));
+        closeWebhookBtn.addEventListener('click', () => webhookModal.classList.remove('open'));
+        webhookModal.addEventListener('click', (e) => {
+            if (e.target === webhookModal) webhookModal.classList.remove('open');
+        });
+
+        // Track custom minutes input changes
+        durationMinutesInput.addEventListener('change', () => {
+            let val = parseInt(durationMinutesInput.value);
+            if (isNaN(val) || val <= 0) val = 25;
+            selectedDurationMinutes = val;
+            durationMinutesInput.value = val;
+        });
+        durationMinutesInput.addEventListener('input', () => {
+            let val = parseInt(durationMinutesInput.value);
+            if (!isNaN(val) && val > 0) {
+                selectedDurationMinutes = val;
+            }
+        });
+
+        // Canvas Fluid Simulation with Hooke's Law Mass-Spring Wave Physics
+        const ctx = fluidCanvas.getContext('2d');
+        const numColumns = 80;
+        const columns = [];
+        
+        let prevMouseX = -1000;
+        let prevMouseY = -1000;
+        let mouseX = -1000;
+        let mouseY = -1000;
+        let mouseVx = 0;
+        let mouseVy = 0;
+        let isHovered = false;
+        let currentPercentage = 0;
+
+        function initColumns() {
+            columns.length = 0;
+            for (let i = 0; i <= numColumns; i++) {
+                columns.push({
+                    x: (fluidCanvas.width / numColumns) * i,
+                    y: fluidCanvas.height,
+                    vy: 0
+                });
+            }
+        }
+        initColumns();
+
+        // Track mouse movements and compute velocity vectors relative to the wrapper
+        timerWrapper.addEventListener('mousemove', (e) => {
+            const rect = timerWrapper.getBoundingClientRect();
+            const currentMouseX = ((e.clientX - rect.left) / rect.width) * fluidCanvas.width;
+            const currentMouseY = ((e.clientY - rect.top) / rect.height) * fluidCanvas.height;
             
-            const timeStr = new Date().toTimeString().split(' ')[0];
-            
-            const timeSpan = document.createElement('span');
-            timeSpan.className = 'log-time';
-            timeSpan.textContent = timeStr;
-            
-            const roleSpan = document.createElement('span');
-            roleSpan.className = `log-role ${role}`;
-            roleSpan.textContent = role.toUpperCase() + ':';
-            
-            const textSpan = document.createElement('span');
-            textSpan.className = 'log-text';
-            textSpan.textContent = text;
-            
-            entry.appendChild(timeSpan);
-            entry.appendChild(roleSpan);
-            entry.appendChild(textSpan);
-            
-            consoleLogs.appendChild(entry);
-            consoleLogs.scrollTop = consoleLogs.scrollHeight;
+            if (prevMouseX !== -1000) {
+                mouseVx = currentMouseX - prevMouseX;
+                mouseVy = currentMouseY - prevMouseY;
+            }
+            prevMouseX = currentMouseX;
+            prevMouseY = currentMouseY;
+            mouseX = currentMouseX;
+            mouseY = currentMouseY;
+            isHovered = true;
+        });
+
+        timerWrapper.addEventListener('mouseleave', () => {
+            mouseX = -1000;
+            mouseY = -1000;
+            prevMouseX = -1000;
+            prevMouseY = -1000;
+            mouseVx = 0;
+            mouseVy = 0;
+            isHovered = false;
+        });
+
+        function animateFluid() {
+            requestAnimationFrame(animateFluid);
+            ctx.clearRect(0, 0, fluidCanvas.width, fluidCanvas.height);
+
+            // Calculate fill percentage based on active session stats
+            let targetPercentage = 0;
+            const isActiveSession = (callFrame !== null);
+
+            if (isActiveSession) {
+                targetPercentage = Math.min(1.0, elapsedSeconds / (selectedDurationMinutes * 60));
+            }
+
+            // Smoothly interpolate (LERP) the water level to prevent jumps
+            currentPercentage += (targetPercentage - currentPercentage) * 0.04;
+
+            const targetLevelY = fluidCanvas.height - (currentPercentage * fluidCanvas.height);
+
+            // Update Spring Forces (Hooke's Law)
+            const k = 0.025;   // Spring constant (stiffness)
+            const d = 0.04;    // Damping
+            const spread = 0.06; // Propagation rate
+
+            for (let i = 0; i <= numColumns; i++) {
+                const displacement = columns[i].y - targetLevelY;
+                const force = -k * displacement - d * columns[i].vy;
+                columns[i].vy += force;
+                columns[i].y += columns[i].vy;
+            }
+
+            // Wave Propagation (8 passes per frame for fluid spread)
+            const passes = 8;
+            for (let p = 0; p < passes; p++) {
+                for (let i = 0; i <= numColumns; i++) {
+                    if (i > 0) {
+                        const leftDelta = spread * (columns[i].y - columns[i-1].y);
+                        columns[i-1].vy += leftDelta;
+                        columns[i-1].y += leftDelta;
+                    }
+                    if (i < numColumns) {
+                        const rightDelta = spread * (columns[i].y - columns[i+1].y);
+                        columns[i+1].vy += rightDelta;
+                        columns[i+1].y += rightDelta;
+                    }
+                }
+            }
+
+            // Interactive Wave Displacement from Cursor (Proximity + Directional Sloshing)
+            if (isHovered && mouseX >= 0 && mouseX <= fluidCanvas.width) {
+                const colIndex = Math.round((mouseX / fluidCanvas.width) * numColumns);
+                if (colIndex >= 0 && colIndex <= numColumns) {
+                    const col = columns[colIndex];
+                    
+                    // ONLY trigger displacement if cursor touches or goes below the current water level
+                    if (mouseY >= col.y - 30 && mouseY <= fluidCanvas.height) {
+                        const radius = 10;
+                        for (let j = -radius; j <= radius; j++) {
+                            const idx = colIndex + j;
+                            if (idx >= 0 && idx <= numColumns) {
+                                const dist = Math.abs(j);
+                                const influence = Math.max(0, 1 - dist / radius);
+                                
+                                // Vertical velocity pushes/pulls the water (e.g. downward mouse movement pushes water down)
+                                if (Math.abs(mouseVy) > 0.05) {
+                                    columns[idx].vy += mouseVy * influence * 0.15;
+                                }
+                                
+                                // Horizontal velocity creates directional wave crests (sloshing effect)
+                                if (Math.abs(mouseVx) > 0.05) {
+                                    columns[idx].vy += -mouseVx * (j / radius) * influence * 0.3;
+                                }
+
+                                // Direct volume occupancy: push water downwards directly beneath cursor
+                                const depth = mouseY - columns[idx].y;
+                                if (depth > -20 && depth < 40) {
+                                    const pushAmt = (40 - depth) * influence * 0.08;
+                                    columns[idx].vy += pushAmt;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Decay mouse velocity
+            mouseVx *= 0.92;
+            mouseVy *= 0.92;
+
+            // Choose wave colors and timer outer rings (locked to premium blue theme)
+            let liquidColor1 = 'rgba(59, 130, 246, 0.85)'; // Default blue
+            let liquidColor2 = 'rgba(29, 78, 216, 0.95)';
+            let liquidColor3 = 'rgba(96, 165, 250, 0.45)';
+            let liquidColor4 = 'rgba(37, 99, 235, 0.35)';
+
+            timerWrapper.classList.remove('state-blue', 'state-green', 'state-indigo', 'state-purple', 'state-completed');
+
+            if (isActiveSession) {
+                timerWrapper.classList.add('state-blue');
+            }
+
+            // Draw wave graphics if water is in the glass
+            if (currentPercentage > 0.001) {
+                ctx.save();
+                
+                // Clip canvas to the inner circle (accounting for glass border)
+                ctx.beginPath();
+                ctx.arc(fluidCanvas.width / 2, fluidCanvas.height / 2, fluidCanvas.width / 2 - 4, 0, Math.PI * 2);
+                ctx.clip();
+
+                // Wave Layer 1: Base & Deep liquid gradient
+                ctx.beginPath();
+                ctx.moveTo(0, fluidCanvas.height);
+                ctx.lineTo(columns[0].x, columns[0].y);
+                for (let i = 1; i <= numColumns; i++) {
+                    const prevCol = columns[i-1];
+                    const col = columns[i];
+                    const xc = (prevCol.x + col.x) / 2;
+                    const yc = (prevCol.y + col.y) / 2;
+                    ctx.quadraticCurveTo(prevCol.x, prevCol.y, xc, yc);
+                }
+                ctx.lineTo(fluidCanvas.width, columns[numColumns].y);
+                ctx.lineTo(fluidCanvas.width, fluidCanvas.height);
+                ctx.closePath();
+
+                const grad1 = ctx.createLinearGradient(0, targetLevelY - 50, 0, fluidCanvas.height);
+                grad1.addColorStop(0, liquidColor1);
+                grad1.addColorStop(1, liquidColor2);
+                ctx.fillStyle = grad1;
+                ctx.fill();
+
+                // Wave Layer 2: Translucent overlay layer
+                ctx.beginPath();
+                ctx.moveTo(0, fluidCanvas.height);
+                ctx.lineTo(columns[0].x, columns[0].y + 10);
+                for (let i = 1; i <= numColumns; i++) {
+                    const prevCol = columns[i-1];
+                    const col = columns[i];
+                    const waveOffset = Math.sin(col.x * 0.015 + Date.now() * 0.003) * 6;
+                    const yc_prev = prevCol.y + 10 + waveOffset;
+                    const yc_curr = col.y + 10 + waveOffset;
+                    const xc = (prevCol.x + col.x) / 2;
+                    const yc = (yc_prev + yc_curr) / 2;
+                    ctx.quadraticCurveTo(prevCol.x, yc_prev, xc, yc);
+                }
+                ctx.lineTo(fluidCanvas.width, columns[numColumns].y + 10);
+                ctx.lineTo(fluidCanvas.width, fluidCanvas.height);
+                ctx.closePath();
+
+                const grad2 = ctx.createLinearGradient(0, targetLevelY - 40, 0, fluidCanvas.height);
+                grad2.addColorStop(0, liquidColor3);
+                grad2.addColorStop(1, liquidColor4);
+                ctx.fillStyle = grad2;
+                ctx.fill();
+
+                ctx.restore();
+            }
         }
 
-        // Setup microphone analyzer for sphere reactivity when USER talks
-        async function setupMicAnalyzer() {
+        // Start drawing loop immediately
+        animateFluid();
+
+        // Generate contribution calendar for past 28 days (starting on Sunday)
+        async function fetchHistoryAndRenderCalendar() {
             try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const source = audioCtx.createMediaStreamSource(microphoneStream);
-                analyzer = audioCtx.createAnalyser();
-                analyzer.fftSize = 64;
-                source.connect(analyzer);
-                
-                const bufferLength = analyzer.frequencyBinCount;
-                dataArray = new Uint8Array(bufferLength);
-                
-                drawVisualizer();
+                const res = await fetch('/history');
+                studyHistory = await res.json();
             } catch (err) {
-                console.error("Microphone feedback visualization not supported:", err);
+                console.error("Failed to load study history:", err);
             }
+            renderCalendar();
+            loadDetailsForDate(selectedDateStr);
         }
 
-        function drawVisualizer() {
-            if (!analyzer) return;
-            requestAnimationFrame(drawVisualizer);
-            
-            analyzer.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-                sum += dataArray[i];
+        function renderCalendar() {
+            // Remove existing cell elements (keep the header row)
+            const headers = calendarGrid.querySelectorAll('.calendar-day-header');
+            calendarGrid.innerHTML = '';
+            headers.forEach(h => calendarGrid.appendChild(h));
+
+            // Generate 28 days ending with today, padded at start to line up weekdays
+            const today = new Date();
+            const datesList = [];
+            for (let i = 27; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(today.getDate() - i);
+                datesList.push(d);
             }
-            const average = sum / dataArray.length;
-            
-            // Scaled sphere pulse based on volume
-            if (average > 10) {
-                const scale = 1 + (average / 150);
-                visualizerSphere.style.transform = `scale(${scale})`;
-                visualizerSphere.style.boxShadow = `0 0 ${40 + average}px var(--accent-cyan-glow)`;
-                if (speakerStatus.textContent !== "COACH TALKING") {
-                    speakerStatus.textContent = "USER SPEAKING";
-                    speakerStatus.style.color = "var(--accent-cyan)";
-                }
-            } else {
-                if (speakerStatus.textContent === "USER SPEAKING") {
-                    speakerStatus.textContent = "LISTENING";
-                    speakerStatus.style.color = "var(--text-muted)";
-                    visualizerSphere.style.transform = "scale(1)";
-                }
+
+            // Find weekday of first date in list to pad
+            const firstDayWeekday = datesList[0].getDay();
+            for (let p = 0; p < firstDayWeekday; p++) {
+                const pad = document.createElement('div');
+                pad.style.visibility = 'hidden';
+                calendarGrid.appendChild(pad);
             }
+
+            // Render active day cells
+            datesList.forEach(date => {
+                const dateStr = date.toISOString().split('T')[0];
+                const dayData = studyHistory[dateStr] || { total_focus_seconds: 0 };
+                const focusMinutes = dayData.total_focus_seconds / 60;
+
+                // Color index: 0m, 1-15m, 16-45m, 46-90m, >90m
+                let heatClass = 'heat-0';
+                if (focusMinutes > 90) heatClass = 'heat-4';
+                else if (focusMinutes > 45) heatClass = 'heat-3';
+                else if (focusMinutes > 15) heatClass = 'heat-2';
+                else if (focusMinutes > 0) heatClass = 'heat-1';
+
+                const cell = document.createElement('div');
+                cell.className = `calendar-cell ${heatClass}`;
+                if (dateStr === selectedDateStr) cell.classList.add('active');
+                
+                // Show tooltip on hover
+                const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                cell.title = `${formattedDate}: ${Math.round(focusMinutes)} min focused`;
+
+                cell.addEventListener('click', () => {
+                    // Update active state in DOM
+                    calendarGrid.querySelectorAll('.calendar-cell').forEach(c => c.classList.remove('active'));
+                    cell.classList.add('active');
+                    selectedDateStr = dateStr;
+                    loadDetailsForDate(dateStr);
+                });
+
+                calendarGrid.appendChild(cell);
+            });
+        }
+
+        // Display time-spent details on apps/websites
+        function loadDetailsForDate(dateStr) {
+            const dayData = studyHistory[dateStr] || { total_focus_seconds: 0, apps: {} };
+            const dateObj = new Date(dateStr);
+            const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            
+            detailsTitle.textContent = `Activity Details — ${formattedDate}`;
+            activityDetails.innerHTML = '';
+
+            const apps = dayData.apps || {};
+            const appList = Object.entries(apps).map(([name, seconds]) => ({ name, seconds }));
+            
+            if (appList.length === 0) {
+                activityDetails.innerHTML = `<div class="empty-activity">No study activity logged for this day.</div>`;
+                return;
+            }
+
+            // Sort apps by time spent descending
+            appList.sort((a, b) => b.seconds - a.seconds);
+            const maxSeconds = Math.max(...appList.map(a => a.seconds), 1);
+
+            // Render list
+            appList.forEach(item => {
+                const min = Math.round(item.seconds / 60);
+                const timeText = min > 0 ? `${min}m` : `${item.seconds}s`;
+                
+                // Simple heuristic for UI styling color dots
+                const isDistraction = ["netflix.com", "instagram.com", "reddit.com", "twitter.com", "x.com", "tiktok.com", "facebook.com", "twitch.tv", "steam.exe", "spotify.exe"].some(d => item.name.includes(d));
+                const isStudy = ["khanacademy.org", "notion.so", "coursera.org", "edx.org", "wikipedia.org", "code.exe", "pycharm", "obsidian", "anki"].some(s => item.name.includes(s));
+                
+                let typeClass = '';
+                if (isStudy) typeClass = 'study';
+                else if (isDistraction) typeClass = 'distraction';
+
+                const pct = (item.seconds / maxSeconds) * 100;
+
+                const appItem = document.createElement('div');
+                appItem.className = 'activity-item';
+                appItem.innerHTML = `
+                    <div class="activity-header">
+                        <div class="activity-name-wrapper">
+                            <span class="activity-dot ${typeClass}"></span>
+                            <span>${item.name}</span>
+                        </div>
+                        <span class="activity-time">${timeText}</span>
+                    </div>
+                    <div class="activity-bar-bg">
+                        <div class="activity-bar-fill ${typeClass}" style="width: ${pct}%"></div>
+                    </div>
+                `;
+                activityDetails.appendChild(appItem);
+            });
         }
 
         async function updateStats() {
@@ -623,76 +1286,80 @@
                 const resp = await fetch('/session');
                 const data = await resp.json();
                 if (data.active) {
-                    // Update elapsed time
-                    const totalSecs = data.duration_seconds;
-                    const mins = Math.floor(totalSecs / 60).toString().padStart(2, '0');
-                    const secs = (totalSecs % 60).toString().padStart(2, '0');
-                    statTime.textContent = `${mins}:${secs}`;
-
-                    // Update focus streak
-                    const streakMins = Math.floor(data.focus_streak_seconds / 60);
-                    statStreak.textContent = `${streakMins}m`;
-
-                    // Update distractions
-                    statDistractions.textContent = data.distraction_count;
+                    // Get real elapsed time from server-side session
+                    elapsedSeconds = data.duration_seconds;
+                    
+                    const totalTargetSeconds = selectedDurationMinutes * 60;
+                    const remainingSeconds = Math.max(0, totalTargetSeconds - elapsedSeconds);
+                    
+                    // Format and print countdown timer
+                    const mins = Math.floor(remainingSeconds / 60).toString().padStart(2, '0');
+                    const secs = (remainingSeconds % 60).toString().padStart(2, '0');
+                    
+                    if (remainingSeconds > 0) {
+                        timerDisplay.textContent = `${mins}:${secs}`;
+                        timerSubtext.textContent = "Time Remaining";
+                    } else {
+                        // Completed!
+                        timerDisplay.textContent = "100%";
+                        timerDisplay.style.color = "var(--accent-blue)";
+                        timerSubtext.textContent = "Goal Achieved!";
+                        timerStatus.textContent = "COMPLETED";
+                        timerStatus.style.color = "var(--accent-blue)";
+                    }
 
                     // Update UI status badges
                     if (data.off_task_seconds > 0) {
                         statusBadge.className = "status-badge distracted";
                         statusBadgeText.textContent = `Off-task: ${data.off_task_seconds}s`;
-                        statStatus.textContent = "DISTRACTED";
-                        statStatus.style.color = "var(--accent-pink)";
-                    } else {
+                        timerStatus.textContent = "DISTRACTED";
+                        timerStatus.style.color = "var(--accent-crimson)";
+                    } else if (remainingSeconds > 0) {
                         statusBadge.className = "status-badge connected";
                         statusBadgeText.textContent = "Focusing";
-                        statStatus.textContent = "STABLE";
-                        statStatus.style.color = "var(--accent-green)";
+                        timerStatus.textContent = "FOCUSING";
+                        timerStatus.style.color = "var(--accent-green)";
                     }
                 }
             } catch (err) {
-                console.error("Error fetching session stats:", err);
+                console.error("Error fetching stats:", err);
             }
         }
 
+        // Start Coaching Trigger
         startBtn.addEventListener('click', async () => {
             startBtn.disabled = true;
             startBtn.textContent = 'Connecting...';
             
             try {
-                // Check if a call instance already exists and destroy it to avoid duplicate instance error
+                // Destroy duplicate instance if left over
                 const existingFrame = window.DailyIframe.getCallInstance();
                 if (existingFrame) {
-                    try {
-                        await existingFrame.destroy();
-                    } catch (e) {
-                        console.log("Error destroying existing frame:", e);
-                    }
+                    try { await existingFrame.destroy(); } catch (e) {}
                 }
                 
-                addLog('system', 'Initializing WebRTC connection to coach...');
-                
-                // 1. POST connect to FastAPI server
+                planInput.disabled = true;
+                controlLaptopToggle.disabled = true;
+                durationMinutesInput.disabled = true;
+
+                // 1. POST session details to backend
                 const response = await fetch('/connect', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        plan: planInput.value,
-                        persona: personaSelect.value,
-                        subject: subjectInput.value
+                        plan: planInput.value || "Focus Session",
+                        control_laptop: controlLaptopToggle.checked
                     })
                 });
 
-                if (!response.ok) {
-                    throw new Error("Failed to connect to backend server.");
-                }
+                if (!response.ok) throw new Error("Failed to start session on the server.");
 
                 const { room_url, token } = await response.json();
-                addLog('system', `Room created. Joining session via Daily WebRTC...`);
 
-                // 2. Initialize Daily Call
+                // 2. Initialize Daily Call object
                 callFrame = window.DailyIframe.createCallObject();
 
-                // Handle headless WebRTC audio tracks
+                // Track headless audio stream elements
                 callFrame.on('track-started', (evt) => {
                     if (evt.track.kind === 'audio' && !evt.participant.local) {
                         const trackId = evt.track.id;
@@ -703,7 +1370,6 @@
                             audioEl.srcObject = new MediaStream([evt.track]);
                             document.body.appendChild(audioEl);
                             remoteAudioElements[trackId] = audioEl;
-                            console.log(`Playing remote audio track: ${trackId}`);
                         }
                     }
                 });
@@ -715,119 +1381,132 @@
                         audioEl.pause();
                         audioEl.remove();
                         delete remoteAudioElements[trackId];
-                        console.log(`Stopped remote audio track: ${trackId}`);
                     }
                 });
                 
-                // 3. Connect to WebRTC
+                // Connect call
                 await callFrame.join({ url: room_url, token: token });
-                addLog('system', 'Voice session active. Adjusting audio output...');
 
-                // Toggle visibility
+                // UI display adjustments
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'block';
                 startBtn.disabled = false;
-                startBtn.textContent = 'Start Coaching';
+                startBtn.textContent = 'Start Study';
 
                 statusBadge.className = 'status-badge connected';
-                statusBadgeText.textContent = 'Active Session';
-                speakerStatus.textContent = 'LISTENING';
-                speakerStatus.style.color = 'var(--text-muted)';
-                visualizerSphere.classList.add('is-speaking');
+                statusBadgeText.textContent = 'Focusing';
 
-                // 4. Start Local Audio Analyzer for USER visualization
-                await setupMicAnalyzer();
+                timerStatus.textContent = 'FOCUSING';
+                timerStatus.style.color = 'var(--accent-green)';
+                timerSubtext.textContent = 'Time Remaining';
 
-                // 5. Track Daily Events
-                callFrame.on('participant-updated', (evt) => {
-                    const p = evt.participant;
-                    // If the bot (coach) is talking
-                    if (!p.local && p.audio) {
-                        // Check if speaking (some heuristics or track volume checking)
-                    }
-                });
+                timerWrapper.classList.add('active');
 
+                // Lock in selected duration and trigger local ticking fallback
+                elapsedSeconds = 0;
+                const initialMins = selectedDurationMinutes.toString().padStart(2, '0');
+                
+                // Hide input wrapper, show formatted display text
+                durationInputWrapper.style.display = 'none';
+                timerDisplay.style.display = 'inline';
+                timerDisplay.textContent = `${initialMins}:00`;
+
+                // Run stats fetching loops
+                statsInterval = setInterval(updateStats, 2000);
+
+                // Speaker tracking events
                 callFrame.on('active-speaker-change', (evt) => {
                     const peerId = evt.activeSpeaker.peerId;
                     const localParticipant = callFrame.participants().local;
                     if (peerId !== localParticipant.session_id) {
-                        // Coach is speaking!
-                        speakerStatus.textContent = "COACH TALKING";
-                        speakerStatus.style.color = "var(--primary)";
-                        visualizerSphere.style.borderColor = "var(--primary)";
-                        addLog('coach', 'Coach responds...');
+                        // Coach is talking
+                        timerStatus.textContent = "COACH TALKING";
+                        timerStatus.style.color = "var(--accent-indigo)";
                     } else {
-                        // User is speaking
+                        timerStatus.textContent = "USER SPEAKING";
+                        timerStatus.style.color = "var(--accent-blue)";
                     }
                 });
 
-                // Start polling stats
-                statsInterval = setInterval(updateStats, 2000);
-
             } catch (err) {
-                console.error("Coaching start failed:", err);
-                addLog('system', `Failed to start session: ${err.message}`);
+                console.error("Failed to start study session:", err);
+                try {
+                    await fetch('/stop', { method: 'POST' });
+                } catch (e) {}
+                timerWrapper.classList.remove('active');
+                planInput.disabled = false;
+                controlLaptopToggle.disabled = false;
+                durationMinutesInput.disabled = false;
                 startBtn.disabled = false;
-                startBtn.textContent = 'Start Coaching';
+                startBtn.textContent = 'Start Study';
             }
         });
 
+        // Stop Coaching Trigger
         stopBtn.addEventListener('click', async () => {
             stopBtn.disabled = true;
-            addLog('system', 'Closing connection and ending session...');
             
-            // Clean up remote audio elements
+            // Clean up running audio processes
             for (const trackId in remoteAudioElements) {
                 try {
                     const audioEl = remoteAudioElements[trackId];
                     audioEl.pause();
                     audioEl.remove();
-                } catch (e) {
-                    console.error("Error cleaning up audio element:", e);
-                }
+                } catch (e) {}
                 delete remoteAudioElements[trackId];
             }
 
             if (callFrame) {
-                await callFrame.leave();
-                callFrame.destroy();
+                try {
+                    await callFrame.leave();
+                    await callFrame.destroy();
+                } catch (e) {}
                 callFrame = null;
             }
 
-            if (microphoneStream) {
-                microphoneStream.getTracks().forEach(track => track.stop());
-                microphoneStream = null;
-            }
-
-            if (audioCtx) {
-                await audioCtx.close();
-                audioCtx = null;
+            // POST stop to server
+            try {
+                await fetch('/stop', { method: 'POST' });
+            } catch (e) {
+                console.error("Failed to stop session on server:", e);
             }
 
             clearInterval(statsInterval);
 
-            addLog('system', 'Session ended successfully. Performance logged.');
+            // Re-enable configuration controls
+            planInput.disabled = false;
+            controlLaptopToggle.disabled = false;
+            durationMinutesInput.disabled = false;
 
             // Toggle visibility
             stopBtn.style.display = 'none';
             startBtn.style.display = 'block';
             stopBtn.disabled = false;
 
-            statusBadge.className = 'status-badge idle';
-            statusBadgeText.textContent = 'Disconnected';
-            speakerStatus.textContent = 'SYSTEM OFFLINE';
-            speakerStatus.style.color = 'var(--text-muted)';
-            visualizerSphere.classList.remove('is-speaking');
-            visualizerSphere.style.transform = 'scale(1)';
-            visualizerSphere.style.boxShadow = '0 0 50px var(--primary-glow)';
-            visualizerSphere.style.borderColor = 'rgba(255,255,255,0.1)';
+            statusBadge.className = 'status-badge';
+            statusBadgeText.textContent = 'Offline';
+            
+            timerStatus.textContent = 'READY TO STUDY';
+            timerStatus.style.color = 'var(--text-muted)';
+            timerSubtext.textContent = 'Set Goal Below';
 
-            // Reset stats
-            statTime.textContent = '00:00';
-            statStreak.textContent = '0m';
-            statDistractions.textContent = '0';
-            statStatus.textContent = 'OFFLINE';
-            statStatus.style.color = 'var(--text-muted)';
+            // Reset Custom Input visibility
+            durationInputWrapper.style.display = 'flex';
+            timerDisplay.style.display = 'none';
+            timerDisplay.style.color = 'var(--text-main)';
+            durationMinutesInput.disabled = false;
+            timerWrapper.classList.remove('active');
+
+            // Refresh history and calendar metrics
+            await fetchHistoryAndRenderCalendar();
+        });
+
+        // Initialize historical dashboard statistics on window load
+        window.addEventListener('DOMContentLoaded', () => {
+            fetchHistoryAndRenderCalendar();
+            // Dynamic webhook URL host replacement
+            const currentHost = window.location.host || 'localhost:7860';
+            document.getElementById('webhookUrlExample').textContent = `http://${currentHost}/phone_activity?app=WeChat`;
         });
     </script>
 </body>

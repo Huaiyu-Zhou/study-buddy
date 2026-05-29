@@ -43,9 +43,9 @@ def _get_registered_handlers(session: Session) -> dict:
 
 # --- Schema tests ---
 
-def test_tool_schemas_is_a_list_of_six():
+def test_tool_schemas_is_a_list_of_seven():
     assert isinstance(tools.TOOL_SCHEMAS, list)
-    assert len(tools.TOOL_SCHEMAS) == 6
+    assert len(tools.TOOL_SCHEMAS) == 7
 
 
 def test_all_schemas_have_openai_format():
@@ -62,6 +62,7 @@ def test_schema_names_are_correct():
     assert names == {
         "set_break", "change_persona", "load_wing",
         "update_plan", "get_session_summary", "end_session",
+        "classify_app",
     }
 
 
@@ -119,7 +120,7 @@ def test_end_session_sets_end_requested():
     assert len(result_text) > 0
 
 
-def test_register_tools_registers_all_six():
+def test_register_tools_registers_all_seven():
     session = _session()
     mock_llm = MagicMock()
     registered = []
@@ -128,6 +129,7 @@ def test_register_tools_registers_all_six():
     assert set(registered) == {
         "set_break", "change_persona", "load_wing",
         "update_plan", "get_session_summary", "end_session",
+        "classify_app",
     }
 
 

@@ -11,6 +11,7 @@ class WindowSnapshot:
     url: Optional[str]
     idle_seconds: int
     is_on_task: Optional[bool]  # True=on-task, False=off-task, None=ambiguous (send to LLM)
+    pid: Optional[int] = None
 
 
 @dataclass
@@ -27,6 +28,10 @@ class Session:
     conversation_history: list[dict] = field(default_factory=list)
     break_end: Optional[datetime] = None
     end_requested: bool = False
+    control_laptop: bool = False
+    session_allowed_targets: set[str] = field(default_factory=set)
+    session_denied_targets: set[str] = field(default_factory=set)
+    queried_targets: set[str] = field(default_factory=set)
 
     def off_task_duration_seconds(self) -> int:
         """Seconds the user has been continuously off-task. 0 if currently on-task."""

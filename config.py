@@ -55,7 +55,6 @@ AUDIO_DEVICE_SAMPLE_RATE: int = int(os.getenv("AUDIO_DEVICE_SAMPLE_RATE", "16000
 
 # Heuristic classifier — domains classified without calling Claude
 KNOWN_DISTRACTION_DOMAINS: set[str] = {
-    "youtube.com",
     "netflix.com",
     "instagram.com",
     "reddit.com",
@@ -95,3 +94,100 @@ KNOWN_STUDY_PROCESSES: set[str] = {
     "obsidian.exe",
     "anki.exe",
 }
+
+# Dual-use targets (require verification when opened)
+KNOWN_DUAL_USE_DOMAINS: set[str] = {
+    "youtube.com",
+}
+
+KNOWN_DUAL_USE_PROCESSES: set[str] = set()
+
+# --- Dynamic Persistence Logic ---
+import json
+
+DYNAMIC_RULES_PATH = "watchdog_rules.json"
+
+def load_dynamic_rules():
+    global KNOWN_STUDY_PROCESSES, KNOWN_DISTRACTION_PROCESSES, KNOWN_STUDY_DOMAINS, KNOWN_DISTRACTION_DOMAINS
+    if os.path.exists(DYNAMIC_RULES_PATH):
+        try:
+            with open(DYNAMIC_RULES_PATH, "r", encoding="utf-8") as f:
+                rules = json.load(f)
+            KNOWN_STUDY_PROCESSES.update(rules.get("study_processes", []))
+            KNOWN_DISTRACTION_PROCESSES.update(rules.get("distraction_processes", []))
+            KNOWN_STUDY_DOMAINS.update(rules.get("study_domains", []))
+            KNOWN_DISTRACTION_DOMAINS.update(rules.get("distraction_domains", []))
+        except Exception as e:
+            print(f"Failed to load dynamic rules: {e}")
+
+def add_dynamic_classification(name: str, is_domain: bool, status: str):
+    """Add a target to the dynamic classification lists and persist it."""
+    name_lower = name.lower()
+    
+    # 1. Update active sets in memory
+    if is_domain:
+        if status == "study":
+            KNOWN_STUDY_DOMAINS.add(name_lower)
+            KNOWN_DISTRACTION_DOMAINS.discard(name_lower)
+        elif status == "distraction":
+            KNOWN_DISTRACTION_DOMAINS.add(name_lower)
+            KNOWN_STUDY_DOMAINS.discard(name_lower)
+    else:
+        if status == "study":
+            KNOWN_STUDY_PROCESSES.add(name_lower)
+            KNOWN_DISTRACTION_PROCESSES.discard(name_lower)
+        elif status == "distraction":
+            KNOWN_DISTRACTION_PROCESSES.add(name_lower)
+            KNOWN_STUDY_PROCESSES.discard(name_lower)
+            
+    # 2. Persist to dynamic config file
+    rules = {
+        "study_processes": [],
+        "distraction_processes": [],
+        "study_domains": [],
+        "distraction_domains": []
+    }
+    
+    if os.path.exists(DYNAMIC_RULES_PATH):
+        try:
+            with open(DYNAMIC_RULES_PATH, "r", encoding="utf-8") as f:
+                rules = json.load(f)
+        except Exception:
+            pass
+
+    study_p = set(rules.get("study_processes", []))
+    dist_p = set(rules.get("distraction_processes", []))
+    study_d = set(rules.get("study_domains", []))
+    dist_d = set(rules.get("distraction_domains", []))
+    
+    if is_domain:
+        if status == "study":
+            study_d.add(name_lower)
+            dist_d.discard(name_lower)
+        elif status == "distraction":
+            dist_d.add(name_lower)
+            study_d.discard(name_lower)
+    else:
+        if status == "study":
+            study_p.add(name_lower)
+            dist_p.discard(name_lower)
+        elif status == "distraction":
+            dist_p.add(name_lower)
+            study_p.discard(name_lower)
+            
+    rules["study_processes"] = sorted(list(study_p))
+    rules["distraction_processes"] = sorted(list(dist_p))
+    rules["study_domains"] = sorted(list(study_d))
+    rules["distraction_domains"] = sorted(list(dist_d))
+    
+    try:
+        with open(DYNAMIC_RULES_PATH, "w", encoding="utf-8") as f:
+            json.dump(rules, f, indent=2)
+    except Exception as e:
+        print(f"Failed to save dynamic rules: {e}")
+
+# Load dynamic rules on module import
+load_dynamic_rules()
+
+# --- Mobile Guard Configuration ---
+PHONE_COOLDOWN_SECONDS: int = 60

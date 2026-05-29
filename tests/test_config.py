@@ -15,7 +15,7 @@ def test_config_heuristic_lists_are_sets():
     assert isinstance(config.KNOWN_STUDY_PROCESSES, set)
 
 def test_known_distractions_includes_youtube():
-    assert "youtube.com" in config.KNOWN_DISTRACTION_DOMAINS
+    assert "youtube.com" in config.KNOWN_DUAL_USE_DOMAINS
 
 def test_known_study_includes_khanacademy():
     assert "khanacademy.org" in config.KNOWN_STUDY_DOMAINS

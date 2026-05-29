@@ -364,40 +364,60 @@ class StudyBuddyVoicePipeline:
         logger.info("Starting Pipecat pipeline…")
         await self.runner.run(self.task)
 
-    async def maybe_intervene(self) -> None:
-        """Inject a watchdog intervention into the running pipeline.
-
-        Called from the async watchdog loop when the user has been off-task
-        long enough and cooldown has expired.
-        """
+    async def maybe_intervene(self, force: bool = False, query_target: Optional[str] = None) -> None:
+        """Inject a watchdog intervention or target classification query into the running pipeline."""
         if not self.task or not self.context:
             return
         if self.session.is_on_break():
             return
-        if self.session.off_task_duration_seconds() < config.OFF_TASK_THRESHOLD_SECONDS:
-            return
-        since_last = self.session.seconds_since_last_intervention()
-        if since_last is not None and since_last < config.INTERVENTION_COOLDOWN_SECONDS:
-            return
+            
+        if not force:
+            if self.session.off_task_duration_seconds() < config.OFF_TASK_THRESHOLD_SECONDS:
+                return
+            since_last = self.session.seconds_since_last_intervention()
+            if since_last is not None and since_last < config.INTERVENTION_COOLDOWN_SECONDS:
+                return
 
-        # Build context about the current distraction
+        # Build prompt based on whether it is a query or an intervention
         last_snap = self.session.snapshot_history[-1] if self.session.snapshot_history else None
-        detail = ""
-        if last_snap:
-            detail = f" ({last_snap.process}"
-            if last_snap.url:
-                detail += f", {last_snap.url}"
-            detail += ")"
+        
+        if query_target:
+            self.session.last_intervention = datetime.now()
+            is_domain = "." in query_target
+            target_type = "website domain" if is_domain else "desktop application"
+            
+            prompt = (
+                f"[WATCHDOG_QUERY] User has opened a new or dual-use {target_type}: {query_target}. "
+                f"You do not know if this target is being used for study or distraction. "
+                f"以高冷女S的身份立刻打断并质问用户，问他现在打开这个软件（或网站）是在学习还是在偷懒。"
+                f"警告：你必须等待他的回答，如果他说他在学习，你可以调用 classify_app 允许它（scope 可以选择 'session' 仅限本次或 'permanent' 永久允许）。"
+                f"如果他说他是在偷懒或者不学习，你可以调用 classify_app 将其设为 distraction，它会被立刻关掉！"
+                f"你的问句应该短促、充满怀疑和支配感（例如：“哦？{query_target}？这跟你的计划有什么关系吗？解释一下。”）。"
+            )
+        else:
+            self.session.last_intervention = datetime.now()
+            self.session.distraction_count += 1
+            
+            detail = ""
+            if last_snap:
+                detail = f" ({last_snap.process}"
+                if last_snap.url:
+                    detail += f", {last_snap.url}"
+                detail += ")"
+                
+            if force and self.session.control_laptop:
+                prompt = (
+                    f"[WATCHDOG] User opened a distracting app: {last_snap.process if last_snap else 'unknown'}{detail}. "
+                    f"You have automatically CLOSED this app for them because Laptop Control is enabled. "
+                    f"用极其傲慢、得意、带嘲讽的女S语气严厉训斥他，告诉他你已经把那个碍眼的软件强制关掉了，命令他立刻滚回去学习，不许有小动作。"
+                )
+            else:
+                prompt = (
+                    f"[WATCHDOG] User has been off-task for {self.session.off_task_duration_seconds()}s"
+                    f"{detail}. Study plan: {self.session.plan}. 严厉训斥他，命令他立刻回到学习中。"
+                )
 
-        self.session.last_intervention = datetime.now()
-        self.session.distraction_count += 1
-
-        prompt = (
-            f"[WATCHDOG] User has been off-task for {self.session.off_task_duration_seconds()}s"
-            f"{detail}. Study plan: {self.session.plan}. 严厉训斥他，命令他立刻回到学习中。"
-        )
-
-        # Inject the intervention message and trigger LLM
+        # Inject the intervention/query message and trigger LLM
         self.context.add_message({"role": "system", "content": prompt})
         await self.task.queue_frames([LLMRunFrame()])
 
@@ -419,6 +439,47 @@ class StudyBuddyVoicePipeline:
 
         self.session.last_intervention = datetime.now()
         self.session.focus_streak_start = datetime.now()  # reset to avoid repeated firing
+
+        self.context.add_message({"role": "system", "content": prompt})
+        await self.task.queue_frames([LLMRunFrame()])
+
+    async def intervene_phone(self, app_name: Optional[str] = None, proximity: bool = False) -> None:
+        """Inject a phone distraction intervention or proximity alert."""
+        if not self.task or not self.context:
+            return
+        if self.session.is_on_break():
+            return
+
+        self.session.last_intervention = datetime.now()
+        self.session.distraction_count += 1
+
+        # Base instructions for the selected persona
+        if self.session.persona == "drill_sergeant":
+            role_desc = "用极其暴躁、严厉、高压的教官语气（Drill Sergeant）"
+            action_desc = "大声斥责用户在训练（学习）期间竟然敢碰手机"
+            command_desc = "立刻放下手机，双手放回桌面，开始做俯卧撑或者滚回去干活"
+        elif self.session.persona == "sarcastic_genius":
+            role_desc = "用极其尖酸刻薄、阴阳怪气、充满鄙视的毒舌天才语气（Sarcastic Genius）"
+            action_desc = "嘲讽用户没有自制力，连几分钟不看手机都做不到，智商堪忧"
+            command_desc = "把那个浪费智商的手机拿开，别再让我看到它"
+        else:  # Default to lady_s
+            role_desc = "用极其傲慢、冰冷、带惩罚支配感的恶劣女S语气（Lady S）"
+            action_desc = "严厉训斥这只不长记性的“小狗”居然敢违抗命令偷玩手机"
+            command_desc = "命令他立刻双手离开手机并把手机扔到一边，问他是不是欠调教了"
+
+        if proximity:
+            prompt = (
+                f"[WATCHDOG_PHONE] User brought their mobile phone too close to the desk! "
+                f"Bluetooth proximity detection triggered. "
+                f"Study plan: {self.session.plan}. "
+                f"{role_desc}{action_desc}。检测到手机正贴在电脑旁边，{command_desc}！"
+            )
+        else:
+            prompt = (
+                f"[WATCHDOG_PHONE] User opened app '{app_name}' on their mobile phone! "
+                f"Study plan: {self.session.plan}. "
+                f"{role_desc}{action_desc}（具体动作是打开了 {app_name}），{command_desc}！"
+            )
 
         self.context.add_message({"role": "system", "content": prompt})
         await self.task.queue_frames([LLMRunFrame()])

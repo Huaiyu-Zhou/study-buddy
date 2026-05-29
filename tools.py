@@ -113,6 +113,23 @@ TOOL_SCHEMAS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "classify_app",
+            "description": "Classify a process or web domain as either 'study' or 'distraction' based on user response.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The process name (e.g. 'draw.io') or domain name (e.g. 'youtube.com')."},
+                    "is_domain": {"type": "boolean", "description": "True if target is a website domain, False if it is a desktop process."},
+                    "status": {"type": "string", "enum": ["study", "distraction"], "description": "Whether this is allowed for study or blocked as a distraction."},
+                    "scope": {"type": "string", "enum": ["session", "permanent"], "description": "Whether this classification applies only to this session, or is permanently saved."}
+                },
+                "required": ["name", "is_domain", "status", "scope"]
+            }
+        }
+    },
 ]
 
 
@@ -185,6 +202,40 @@ def register_tools(llm, session: Session) -> None:
         )
         await params.result_callback(summary)
 
+    async def _on_classify_app(params: FunctionCallParams):
+        name = params.arguments["name"]
+        is_domain = params.arguments["is_domain"]
+        status = params.arguments["status"]
+        scope = params.arguments["scope"]
+        
+        name_lower = name.lower()
+        
+        if scope == "session":
+            if status == "study":
+                session.session_allowed_targets.add(name_lower)
+                session.session_denied_targets.discard(name_lower)
+            elif status == "distraction":
+                session.session_denied_targets.add(name_lower)
+                session.session_allowed_targets.discard(name_lower)
+            msg = f"Target {name} classified as {status} for the current session."
+        else:
+            import config
+            config.add_dynamic_classification(name, is_domain, status)
+            msg = f"Target {name} classified permanently as {status}."
+            
+        logger.info(msg)
+        
+        # If Laptop Control is active and it is classified as distraction, close it
+        if status == "distraction" and session.control_laptop:
+            from watchdog import terminate_process
+            terminated = terminate_process(pid=None, name=name)
+            if terminated:
+                msg += " I have terminated the distraction."
+            else:
+                msg += " (Pending termination request sent to client)."
+                
+        await params.result_callback(msg)
+
     # Register each handler with the LLM service
     llm.register_function("set_break", _on_set_break)
     llm.register_function("change_persona", _on_change_persona)
@@ -192,3 +243,4 @@ def register_tools(llm, session: Session) -> None:
     llm.register_function("update_plan", _on_update_plan)
     llm.register_function("get_session_summary", _on_get_session_summary)
     llm.register_function("end_session", _on_end_session)
+    llm.register_function("classify_app", _on_classify_app)

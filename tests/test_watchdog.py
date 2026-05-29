@@ -10,10 +10,11 @@ def test_get_active_window_info_returns_process_and_title(mocker):
     mock_proc.name.return_value = "Chrome.exe"
     mocker.patch("watchdog.psutil.Process", return_value=mock_proc)
 
-    process, title = get_active_window_info()
+    process, title, pid = get_active_window_info()
 
     assert process == "chrome.exe"  # lowercased
     assert title == "YouTube - lofi hip hop"
+    assert pid == 999
 
 def test_get_active_window_info_handles_process_access_denied(mocker):
     import psutil
@@ -22,8 +23,9 @@ def test_get_active_window_info_handles_process_access_denied(mocker):
     mocker.patch("watchdog.win32gui.GetWindowText", return_value="Some Window")
     mocker.patch("watchdog.psutil.Process", side_effect=psutil.AccessDenied(999))
 
-    process, title = get_active_window_info()
+    process, title, pid = get_active_window_info()
     assert process == "unknown"
+    assert pid == 999
 
 def test_get_idle_seconds_returns_integer(mocker):
     mocker.patch("watchdog.ctypes.windll.user32.GetLastInputInfo", return_value=True)
@@ -71,36 +73,44 @@ def _snap(process="notepad.exe", title="Untitled", url=None, idle=0):
     )
 
 def test_classify_known_distraction_url_returns_false():
-    snap = _snap(url="https://www.youtube.com/watch?v=abc")
-    assert classify_snapshot(snap) is False
+    session = Session()
+    snap = _snap(url="https://www.netflix.com/watch/abc")
+    assert classify_snapshot(snap, session) is False
 
 def test_classify_known_study_url_returns_true():
+    session = Session()
     snap = _snap(url="https://khanacademy.org/math/calculus")
-    assert classify_snapshot(snap) is True
+    assert classify_snapshot(snap, session) is True
 
 def test_classify_subdomain_of_distraction_returns_false():
+    session = Session()
     snap = _snap(url="https://old.reddit.com/r/learnpython")
-    assert classify_snapshot(snap) is False
+    assert classify_snapshot(snap, session) is False
 
 def test_classify_ambiguous_url_returns_none():
+    session = Session()
     snap = _snap(url="https://discord.com/channels/123/456")
-    assert classify_snapshot(snap) is None
+    assert classify_snapshot(snap, session) is None
 
 def test_classify_known_distraction_process_no_url_returns_false():
+    session = Session()
     snap = _snap(process="steam.exe")
-    assert classify_snapshot(snap) is False
+    assert classify_snapshot(snap, session) is False
 
 def test_classify_known_study_process_no_url_returns_true():
+    session = Session()
     snap = _snap(process="code.exe")
-    assert classify_snapshot(snap) is True
+    assert classify_snapshot(snap, session) is True
 
 def test_classify_unknown_process_no_url_returns_none():
+    session = Session()
     snap = _snap(process="unknownapp.exe")
-    assert classify_snapshot(snap) is None
+    assert classify_snapshot(snap, session) is None
 
 def test_classify_url_takes_precedence_over_process():
-    snap = _snap(process="code.exe", url="https://youtube.com/watch?v=xyz")
-    assert classify_snapshot(snap) is False
+    session = Session()
+    snap = _snap(process="code.exe", url="https://netflix.com/watch/xyz")
+    assert classify_snapshot(snap, session) is False
 
 import asyncio
 from unittest.mock import AsyncMock
@@ -128,9 +138,9 @@ async def test_watchdog_loop_calls_on_off_task_when_off_task(mocker):
     session = Session(plan="calculus revision")
     on_off_task = AsyncMock()
 
-    mocker.patch("watchdog.get_active_window_info", return_value=("chrome.exe", "YouTube"))
+    mocker.patch("watchdog.get_active_window_info", return_value=("chrome.exe", "Netflix", 123))
     mocker.patch("watchdog.get_idle_seconds", return_value=0)
-    mocker.patch("watchdog.get_browser_url", return_value="https://youtube.com/watch?v=abc")
+    mocker.patch("watchdog.get_browser_url", return_value="https://netflix.com/watch/abc")
     mocker.patch("watchdog._sleep", new=_yield_once)
 
     await _run_one_tick(watchdog_loop(session, on_off_task), mocker)
@@ -143,7 +153,7 @@ async def test_watchdog_loop_does_not_call_on_off_task_when_on_task(mocker):
     session = Session(plan="calculus revision")
     on_off_task = AsyncMock()
 
-    mocker.patch("watchdog.get_active_window_info", return_value=("code.exe", "main.py - VS Code"))
+    mocker.patch("watchdog.get_active_window_info", return_value=("code.exe", "main.py - VS Code", 123))
     mocker.patch("watchdog.get_idle_seconds", return_value=0)
     mocker.patch("watchdog.get_browser_url", return_value=None)
     mocker.patch("watchdog._sleep", new=_yield_once)
@@ -157,9 +167,9 @@ async def test_watchdog_loop_skips_callback_when_idle(mocker):
     session = Session(plan="calculus revision")
     on_off_task = AsyncMock()
 
-    mocker.patch("watchdog.get_active_window_info", return_value=("chrome.exe", "YouTube"))
+    mocker.patch("watchdog.get_active_window_info", return_value=("chrome.exe", "Netflix", 123))
     mocker.patch("watchdog.get_idle_seconds", return_value=999)
-    mocker.patch("watchdog.get_browser_url", return_value="https://youtube.com/watch?v=abc")
+    mocker.patch("watchdog.get_browser_url", return_value="https://netflix.com/watch/abc")
     mocker.patch("watchdog._sleep", new=_yield_once)
 
     await _run_one_tick(watchdog_loop(session, on_off_task), mocker)
@@ -170,7 +180,7 @@ async def test_watchdog_loop_appends_snapshot_to_history(mocker):
     session = Session(plan="calculus revision")
     on_off_task = AsyncMock()
 
-    mocker.patch("watchdog.get_active_window_info", return_value=("code.exe", "notes.py"))
+    mocker.patch("watchdog.get_active_window_info", return_value=("code.exe", "notes.py", 123))
     mocker.patch("watchdog.get_idle_seconds", return_value=0)
     mocker.patch("watchdog.get_browser_url", return_value=None)
     mocker.patch("watchdog._sleep", new=_yield_once)
