@@ -13,7 +13,9 @@
     "spotify.exe",
     "steam.exe"
   ],
-  "dual_use_processes": [],
+  "dual_use_processes": [
+    "msedge.exe"
+  ],
   "study_domains": [
     "brilliant.org",
     "coursera.org",
