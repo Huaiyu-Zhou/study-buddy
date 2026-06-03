@@ -117,18 +117,30 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "classify_app",
-            "description": "Classify a process or web domain as either 'study' or 'distraction' based on user response.",
+            "description": "Classify a process or web domain as 'study', 'distraction', or 'dual_use' based on user response.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "The process name (e.g. 'draw.io') or domain name (e.g. 'youtube.com')."},
                     "is_domain": {"type": "boolean", "description": "True if target is a website domain, False if it is a desktop process."},
-                    "status": {"type": "string", "enum": ["study", "distraction"], "description": "Whether this is allowed for study or blocked as a distraction."},
+                    "status": {"type": "string", "enum": ["study", "distraction", "dual_use"], "description": "Whether this is allowed for study, blocked as a distraction, or dual-use (can be both)."},
                     "scope": {"type": "string", "enum": ["session", "permanent"], "description": "Whether this classification applies only to this session, or is permanently saved."}
                 },
                 "required": ["name", "is_domain", "status", "scope"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_classified_apps",
+            "description": "Get lists of all current app and website classifications (study, distraction, and dual-use/can be both).",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
     },
 ]
 
@@ -217,6 +229,9 @@ def register_tools(llm, session: Session) -> None:
             elif status == "distraction":
                 session.session_denied_targets.add(name_lower)
                 session.session_allowed_targets.discard(name_lower)
+            elif status == "dual_use":
+                session.session_allowed_targets.discard(name_lower)
+                session.session_denied_targets.discard(name_lower)
             msg = f"Target {name} classified as {status} for the current session."
         else:
             import config
@@ -236,6 +251,16 @@ def register_tools(llm, session: Session) -> None:
                 
         await params.result_callback(msg)
 
+    async def _on_get_classified_apps(params: FunctionCallParams):
+        import config
+        summary = (
+            f"Classified Apps and Websites:\n"
+            f"- Study/Allowed: processes: {list(config.KNOWN_STUDY_PROCESSES)}, websites: {list(config.KNOWN_STUDY_DOMAINS)}\n"
+            f"- Distractions/Blocked: processes: {list(config.KNOWN_DISTRACTION_PROCESSES)}, websites: {list(config.KNOWN_DISTRACTION_DOMAINS)}\n"
+            f"- Dual-Use/Can be both: processes: {list(config.KNOWN_DUAL_USE_PROCESSES)}, websites: {list(config.KNOWN_DUAL_USE_DOMAINS)}"
+        )
+        await params.result_callback(summary)
+
     # Register each handler with the LLM service
     llm.register_function("set_break", _on_set_break)
     llm.register_function("change_persona", _on_change_persona)
@@ -244,3 +269,4 @@ def register_tools(llm, session: Session) -> None:
     llm.register_function("get_session_summary", _on_get_session_summary)
     llm.register_function("end_session", _on_end_session)
     llm.register_function("classify_app", _on_classify_app)
+    llm.register_function("get_classified_apps", _on_get_classified_apps)

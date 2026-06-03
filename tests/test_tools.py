@@ -43,9 +43,9 @@ def _get_registered_handlers(session: Session) -> dict:
 
 # --- Schema tests ---
 
-def test_tool_schemas_is_a_list_of_seven():
+def test_tool_schemas_is_a_list_of_eight():
     assert isinstance(tools.TOOL_SCHEMAS, list)
-    assert len(tools.TOOL_SCHEMAS) == 7
+    assert len(tools.TOOL_SCHEMAS) == 8
 
 
 def test_all_schemas_have_openai_format():
@@ -62,7 +62,7 @@ def test_schema_names_are_correct():
     assert names == {
         "set_break", "change_persona", "load_wing",
         "update_plan", "get_session_summary", "end_session",
-        "classify_app",
+        "classify_app", "get_classified_apps",
     }
 
 
@@ -120,7 +120,7 @@ def test_end_session_sets_end_requested():
     assert len(result_text) > 0
 
 
-def test_register_tools_registers_all_seven():
+def test_register_tools_registers_all_eight():
     session = _session()
     mock_llm = MagicMock()
     registered = []
@@ -129,8 +129,18 @@ def test_register_tools_registers_all_seven():
     assert set(registered) == {
         "set_break", "change_persona", "load_wing",
         "update_plan", "get_session_summary", "end_session",
-        "classify_app",
+        "classify_app", "get_classified_apps",
     }
+
+def test_get_classified_apps_returns_list_summary():
+    session = _session()
+    handlers = _get_registered_handlers(session)
+    params = _make_params({})
+    asyncio.get_event_loop().run_until_complete(handlers["get_classified_apps"](params))
+    result_text = params.result_callback.call_args[0][0]
+    assert isinstance(result_text, str)
+    assert "Classified Apps and Websites" in result_text
+    assert "Study/Allowed" in result_text
 
 
 # --- Phase 6 additions ---

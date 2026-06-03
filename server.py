@@ -253,6 +253,59 @@ async def get_history():
     import history_manager
     return history_manager.load_history()
 
+@app.get("/classifications")
+async def get_classifications():
+    """Retrieve all current classifications (study, distraction, and dual_use)."""
+    return {
+        "study": {
+            "processes": sorted(list(config.KNOWN_STUDY_PROCESSES)),
+            "domains": sorted(list(config.KNOWN_STUDY_DOMAINS))
+        },
+        "distraction": {
+            "processes": sorted(list(config.KNOWN_DISTRACTION_PROCESSES)),
+            "domains": sorted(list(config.KNOWN_DISTRACTION_DOMAINS))
+        },
+        "dual_use": {
+            "processes": sorted(list(config.KNOWN_DUAL_USE_PROCESSES)),
+            "domains": sorted(list(config.KNOWN_DUAL_USE_DOMAINS))
+        }
+    }
+
+@app.post("/classify")
+async def classify(request: Request):
+    """Add or modify a dynamic classification."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Invalid JSON body"})
+        
+    name = data.get("name")
+    is_domain = data.get("is_domain")
+    status = data.get("status")  # "study", "distraction", "dual_use"
+    
+    if not name or is_domain is None or not status:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Missing required fields (name, is_domain, status)"})
+        
+    config.add_dynamic_classification(name, is_domain, status)
+    return {"status": "success"}
+
+@app.post("/classify/delete")
+async def delete_classification(request: Request):
+    """Delete a classification rule."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Invalid JSON body"})
+        
+    name = data.get("name")
+    is_domain = data.get("is_domain")
+    
+    if not name or is_domain is None:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Missing required fields (name, is_domain)"})
+        
+    config.delete_dynamic_classification(name, is_domain)
+    return {"status": "success"}
+
 @app.post("/stop")
 async def stop_session():
     """Stop the active study session and clean up state."""

@@ -395,12 +395,13 @@ class StudyBuddyVoicePipeline:
             
             prompt = (
                 f"System notification: The user has just opened an app/website with an unknown purpose: {query_target}.\n"
-                f"You do not know if this target is for study or a distraction.\n"
-                f"Please politely interrupt and ask the user if they are using '{query_target}' for study or if it's a distraction.\n"
-                f"WARNING: Once the user responds, you MUST call the `classify_app` tool to allow or block the software/website!\n"
+                f"You do not know if this target is for study, a distraction, or dual-use.\n"
+                f"Please politely interrupt and ask the user if they are using '{query_target}' for study, if it's a distraction, or if it can be both (dual-use).\n"
+                f"WARNING: Once the user responds, you MUST call the `classify_app` tool to save the status!\n"
                 f"Simply agreeing verbally is not enough; you must execute the `classify_app` function call to update the system status.\n"
-                f"If they say they are studying, call `classify_app` with status set to 'study'. If they say they are not studying, call `classify_app` with status set to 'distraction'.\n"
-                f"Your query should be warm, curious, and helpful (e.g. 'Oh, I see you opened {query_target}. Is that part of your study plan today? Let me know so I can configure it for you!')."
+                f"If they say they are studying, call `classify_app` with status set to 'study'. If they say they are not studying, call `classify_app` with status set to 'distraction'. If they say it depends or can be both (dual-use), call `classify_app` with status set to 'dual_use'.\n"
+                f"You can also use the `get_classified_apps` tool if you need to check which apps/websites are currently in each category.\n"
+                f"Your query should be warm, curious, and helpful (e.g. 'Oh, I see you opened {query_target}. Is that part of your study plan today? Or is it a distraction, or maybe something you use for both? Let me know so I can configure it for you!')."
             )
         else:
             self.session.last_intervention = datetime.now()
