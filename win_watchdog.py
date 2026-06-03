@@ -69,6 +69,26 @@ async def run_watchdog():
                                 target_process = data.get("target_process")
                                 logger.warning("Server requested to close distracting process: %s (PID: %s)", target_process, target_pid)
                                 terminate_process(target_pid, target_process)
+                            elif action == "close_tab":
+                                target_process = data.get("target_process")
+                                current_process, _, _ = get_active_window_info()
+                                if current_process == target_process:
+                                    logger.warning("Server requested to close distracting tab. Simulating Ctrl+W for: %s", target_process)
+                                    try:
+                                        import ctypes
+                                        import time
+                                        # Simulate Ctrl+W
+                                        ctypes.windll.user32.keybd_event(0x11, 0, 0, 0)  # Ctrl down
+                                        time.sleep(0.05)
+                                        ctypes.windll.user32.keybd_event(0x57, 0, 0, 0)  # W down
+                                        time.sleep(0.05)
+                                        ctypes.windll.user32.keybd_event(0x57, 0, 2, 0)  # W up
+                                        time.sleep(0.05)
+                                        ctypes.windll.user32.keybd_event(0x11, 0, 2, 0)  # Ctrl up
+                                    except Exception as e:
+                                        logger.error("Failed to simulate Ctrl+W: %s", e)
+                                else:
+                                    logger.info("Foreground process changed from %s to %s. Aborting Ctrl+W.", target_process, current_process)
                     else:
                         logger.warning("Failed to send window state: HTTP %d", response.status)
                         

@@ -241,13 +241,16 @@ def register_tools(llm, session: Session) -> None:
         logger.info(msg)
         
         # If Laptop Control is active and it is classified as distraction, close it
-        if status == "distraction" and session.control_laptop:
+        is_browser = name.lower() in {"chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "firefox.exe", "safari.exe", "iexplore.exe"}
+        if status == "distraction" and session.control_laptop and not is_browser:
             from watchdog import terminate_process
             terminated = terminate_process(pid=None, name=name)
             if terminated:
                 msg += " I have terminated the distraction."
             else:
                 msg += " (Pending termination request sent to client)."
+        elif status == "distraction" and session.control_laptop and is_browser:
+            msg += " (Browser target, skipped termination request to avoid closing all tabs)."
                 
         await params.result_callback(msg)
 

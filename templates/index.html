@@ -947,6 +947,18 @@
             background: rgba(99, 102, 241, 0.05);
         }
 
+        .classification-tabs-vertical .tab-btn.active.tab-all {
+            border-left-color: var(--primary);
+            color: var(--primary);
+            background: rgba(37, 99, 235, 0.05);
+        }
+
+        .classification-tabs-vertical .tab-btn.active.tab-other {
+            border-left-color: var(--accent-indigo);
+            color: var(--accent-indigo);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
         .rules-list-container {
             height: 250px;
             overflow-y: auto;
@@ -1209,8 +1221,19 @@
             <!-- Details Card -->
             <div class="panel">
                 <div class="panel-title" id="detailsTitle">Time Spent Details</div>
-                <div class="activity-details-container" id="activityDetails">
-                    <div class="empty-activity">Click a day on the calendar to view application statistics.</div>
+                <div class="classification-layout" style="margin-top: 20px;">
+                    <!-- Left side: Vertical Tabs -->
+                    <div class="classification-tabs-vertical" id="activityTabs">
+                        <button class="tab-btn active tab-all" onclick="switchActivityTab('all')">📊 All</button>
+                        <button class="tab-btn tab-study" onclick="switchActivityTab('study')">✅ Study</button>
+                        <button class="tab-btn tab-distraction" onclick="switchActivityTab('distraction')">🚫 Distraction</button>
+                        <button class="tab-btn tab-other" onclick="switchActivityTab('other')">❓ Other</button>
+                    </div>
+
+                    <!-- Right side: Content -->
+                    <div class="activity-details-container" id="activityDetails" style="flex-grow: 1;">
+                        <div class="empty-activity">Click a day on the calendar to view application statistics.</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1222,7 +1245,7 @@
                 
                 <div class="classification-layout">
                     <!-- Left side: Vertical Tabs -->
-                    <div class="classification-tabs-vertical">
+                    <div class="classification-tabs-vertical" id="rulesTabs">
                         <button class="tab-btn active tab-study" onclick="switchRulesTab('study')">✅ Study</button>
                         <button class="tab-btn tab-distraction" onclick="switchRulesTab('distraction')">🚫 Distractions</button>
                         <button class="tab-btn tab-dual-use" onclick="switchRulesTab('dual_use')">❓ Dual-Use</button>
@@ -1626,14 +1649,38 @@
             }
         }
 
+        let currentActivityTab = 'all';
+
+        window.switchActivityTab = function(tab) {
+            currentActivityTab = tab;
+            // Update tab button styles
+            const tabButtons = document.querySelectorAll('#activityTabs .tab-btn');
+            tabButtons.forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Highlight current tab button based on selection
+            const activeBtn = Array.from(tabButtons).find(btn => btn.getAttribute('onclick').includes(tab));
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+            renderActivityList();
+        }
+
         // Display time-spent details on apps/websites
         function loadDetailsForDate(dateStr) {
-            const dayData = studyHistory[dateStr] || { total_focus_seconds: 0, apps: {} };
+            selectedDateStr = dateStr;
             const parts = dateStr.split('-');
             const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
             const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
             
             detailsTitle.textContent = `Activity Details — ${formattedDate}`;
+            renderActivityList();
+        }
+
+        function renderActivityList() {
+            if (!selectedDateStr) return;
+            const dayData = studyHistory[selectedDateStr] || { total_focus_seconds: 0, apps: {} };
             activityDetails.innerHTML = '';
 
             const apps = dayData.apps || {};
@@ -1644,19 +1691,44 @@
                 return;
             }
 
+            // Categorize and filter appList
+            const filteredList = appList.filter(item => {
+                const isStudy = (classificationsData.study.domains || []).includes(item.name) || 
+                                (classificationsData.study.processes || []).includes(item.name) ||
+                                ["khanacademy.org", "notion.so", "coursera.org", "edx.org", "wikipedia.org", "code.exe", "pycharm", "obsidian", "anki"].some(s => item.name.includes(s));
+
+                const isDistraction = (classificationsData.distraction.domains || []).includes(item.name) || 
+                                      (classificationsData.distraction.processes || []).includes(item.name) ||
+                                      ["netflix.com", "instagram.com", "reddit.com", "twitter.com", "x.com", "tiktok.com", "facebook.com", "twitch.tv", "steam.exe", "spotify.exe"].some(d => item.name.includes(d));
+
+                if (currentActivityTab === 'study') return isStudy;
+                if (currentActivityTab === 'distraction') return isDistraction;
+                if (currentActivityTab === 'other') return !isStudy && !isDistraction;
+                return true; // 'all'
+            });
+
+            if (filteredList.length === 0) {
+                activityDetails.innerHTML = `<div class="empty-activity">No activities in this category.</div>`;
+                return;
+            }
+
             // Sort apps by time spent descending
-            appList.sort((a, b) => b.seconds - a.seconds);
-            const maxSeconds = Math.max(...appList.map(a => a.seconds), 1);
+            filteredList.sort((a, b) => b.seconds - a.seconds);
+            const maxSeconds = Math.max(...filteredList.map(a => a.seconds), 1);
 
             // Render list
-            appList.forEach(item => {
+            filteredList.forEach(item => {
                 const min = Math.round(item.seconds / 60);
                 const timeText = min > 0 ? `${min}m` : `${item.seconds}s`;
                 
-                // Simple heuristic for UI styling color dots
-                const isDistraction = ["netflix.com", "instagram.com", "reddit.com", "twitter.com", "x.com", "tiktok.com", "facebook.com", "twitch.tv", "steam.exe", "spotify.exe"].some(d => item.name.includes(d));
-                const isStudy = ["khanacademy.org", "notion.so", "coursera.org", "edx.org", "wikipedia.org", "code.exe", "pycharm", "obsidian", "anki"].some(s => item.name.includes(s));
-                
+                const isStudy = (classificationsData.study.domains || []).includes(item.name) || 
+                                (classificationsData.study.processes || []).includes(item.name) ||
+                                ["khanacademy.org", "notion.so", "coursera.org", "edx.org", "wikipedia.org", "code.exe", "pycharm", "obsidian", "anki"].some(s => item.name.includes(s));
+
+                const isDistraction = (classificationsData.distraction.domains || []).includes(item.name) || 
+                                      (classificationsData.distraction.processes || []).includes(item.name) ||
+                                      ["netflix.com", "instagram.com", "reddit.com", "twitter.com", "x.com", "tiktok.com", "facebook.com", "twitch.tv", "steam.exe", "spotify.exe"].some(d => item.name.includes(d));
+
                 let typeClass = '';
                 if (isStudy) typeClass = 'study';
                 else if (isDistraction) typeClass = 'distraction';
@@ -1955,6 +2027,7 @@
                 const res = await fetch('/classifications');
                 classificationsData = await res.json();
                 renderRulesList();
+                renderActivityList();
             } catch (err) {
                 console.error("Failed to load classifications:", err);
             }
@@ -1963,7 +2036,7 @@
         window.switchRulesTab = function(tab) {
             currentRulesTab = tab;
             // Update tab button styles
-            const tabButtons = document.querySelectorAll('.classification-tabs-vertical .tab-btn');
+            const tabButtons = document.querySelectorAll('#rulesTabs .tab-btn');
             tabButtons.forEach(btn => {
                 btn.style.color = '';
                 btn.classList.remove('active');

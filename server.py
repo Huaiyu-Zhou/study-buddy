@@ -221,11 +221,19 @@ async def update_activity(request: Request):
             if active_session.off_task_start is None:
                 active_session.off_task_start = datetime.now()
             
-            if active_session.control_laptop:
+            # Do not close browser processes to avoid losing the user's other tabs
+            is_browser = process.lower() in {"chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "firefox.exe", "safari.exe", "iexplore.exe"}
+            if active_session.control_laptop and not is_browser:
                 logger.warning("watchdog update: distracting process detected! Requiring client to close: %s", process)
                 action_payload = {
                     "action": "close_process",
                     "target_pid": snapshot.pid,
+                    "target_process": snapshot.process,
+                }
+            elif active_session.control_laptop and is_browser:
+                logger.warning("watchdog update: distracting website detected on browser '%s'. Requiring client to close tab.", process)
+                action_payload = {
+                    "action": "close_tab",
                     "target_process": snapshot.process,
                 }
             

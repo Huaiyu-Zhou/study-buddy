@@ -253,7 +253,8 @@ async def watchdog_loop(
                 if session.off_task_start is None:
                     session.off_task_start = datetime.now()
                 
-                if session.control_laptop:
+                is_browser = process.lower() in (CHROMIUM_PROCESSES | {"firefox.exe", "safari.exe", "iexplore.exe"})
+                if session.control_laptop and not is_browser:
                     logger.warning("watchdog: distracting process detected! Closing: %s", process)
                     terminate_process(snapshot.pid, snapshot.process)
                     try:
@@ -261,8 +262,26 @@ async def watchdog_loop(
                     except TypeError:
                         await on_off_task(snapshot, session)
                 else:
+                    if session.control_laptop and is_browser:
+                        logger.warning("watchdog: distracting website detected on browser '%s'. Simulating Ctrl+W to close active tab.", process)
+                        try:
+                            hwnd = win32gui.GetForegroundWindow()
+                            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                            if pid == snapshot.pid:
+                                import ctypes
+                                import time
+                                ctypes.windll.user32.keybd_event(0x11, 0, 0, 0)  # Ctrl down
+                                time.sleep(0.05)
+                                ctypes.windll.user32.keybd_event(0x57, 0, 0, 0)  # W down
+                                time.sleep(0.05)
+                                ctypes.windll.user32.keybd_event(0x57, 0, 2, 0)  # W up
+                                time.sleep(0.05)
+                                ctypes.windll.user32.keybd_event(0x11, 0, 2, 0)  # Ctrl up
+                        except Exception as e:
+                            logger.error("Failed to simulate Ctrl+W in local watchdog: %s", e)
                     try:
-                        await on_off_task(snapshot, session, force=False)
+                        force_intervention = session.control_laptop and is_browser
+                        await on_off_task(snapshot, session, force=force_intervention)
                     except TypeError:
                         await on_off_task(snapshot, session)
                         
