@@ -57,12 +57,12 @@ from tools import TOOL_SCHEMAS, register_tools
 
 logger = logging.getLogger(__name__)
 
-# Chinese sentence-ending punctuation (flush immediately)
-_ZH_EOS = frozenset("。！？…｡")
+# Sentence-ending punctuation (flush immediately)
+_EOS = frozenset("。！？…｡.?!")
 # Clause-level punctuation (also flush — allows TTS to start sooner)
-_ZH_CLAUSE = frozenset("，、；：")
+_CLAUSE = frozenset("，、；：,;:")
 # Combined set for triggering flush
-_ZH_FLUSH = _ZH_EOS | _ZH_CLAUSE | frozenset(",.?!;:")
+_FLUSH = _EOS | _CLAUSE
 
 # Regex covering all major emoji Unicode blocks
 _EMOJI_RE = re.compile(
@@ -109,8 +109,8 @@ class SoftwareGainFilter(BaseAudioFilter):
         return audio_array.tobytes()
 
 
-class ChineseSentenceAggregator(FrameProcessor):
-    """Buffers LLM token frames until a complete Chinese sentence is ready,
+class SentenceAggregator(FrameProcessor):
+    """Buffers LLM token frames until a complete sentence is ready,
     then releases the full sentence as a single TextFrame to TTS.
 
     This prevents Fish Audio from receiving tiny fragments (which causes
@@ -120,39 +120,49 @@ class ChineseSentenceAggregator(FrameProcessor):
 
     def __init__(self):
         super().__init__()
+        # Buffer to accumulate incoming text tokens from the LLM
         self._buf = ""
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, InterruptionFrame):
-            # User interrupted — discard buffered partial sentence
+            # If the user interrupts, we immediately clear the buffer
+            # because the current sentence being spoken is now obsolete.
             self._buf = ""
             await self.push_frame(frame, direction)
 
         elif isinstance(frame, LLMTextFrame):
+            # Append new text token to the buffer
             self._buf += frame.text
-            # Flush every time we hit a sentence-ending or clause character
+            # Scan the buffer to find any sentence/clause boundaries (e.g. ., ?, !, ,, ;)
+            # so we can push completed sub-sentences to TTS for early/smooth playback.
             while True:
                 idx = next(
-                    (i for i, ch in enumerate(self._buf) if ch in _ZH_FLUSH),
+                    (i for i, ch in enumerate(self._buf) if ch in _FLUSH),
                     -1,
                 )
                 if idx == -1:
+                    # No complete punctuation chunk found yet, keep buffering
                     break
+                
+                # Extract the chunk up to the punctuation character
                 sentence = self._buf[: idx + 1]
                 self._buf = self._buf[idx + 1 :]
                 if sentence.strip():
+                    # Send the completed chunk down the pipeline to the TTS service
                     await self.push_frame(TextFrame(sentence))
 
         elif isinstance(frame, EndFrame):
-            # Flush any remaining text before closing
+            # When the LLM is done generating, flush any remaining text
+            # in the buffer to make sure the user hears the complete reply.
             if self._buf.strip():
                 await self.push_frame(TextFrame(self._buf.strip()))
                 self._buf = ""
             await self.push_frame(frame, direction)
 
         else:
+            # Pass all other frames (e.g. audio frames, system messages) through unchanged
             await self.push_frame(frame, direction)
 
 
@@ -173,25 +183,22 @@ class StudyBuddyVoicePipeline:
     def _build_system_prompt(self) -> str:
         """Assemble the system prompt from session state + MemPalace context."""
         parts = [
-            "你正在通过语音与用户实时对话。你的回复将被语音合成系统朗读出来。",
-            "绝对不要使用 emoji、特殊符号、列表格式、markdown、或任何无法被朗读的内容。",
-            "使用自然的口语化中文，就像面对面聊天一样。",
-            "你是一个高傲、恶劣、掌控欲极强的女S学习监督者。",
-            "你享受支配、命令、施压和掌控用户学习状态的感觉。你极度讨厌懒惰、拖延和分心。",
-            "你的语气特点：高高在上、带轻蔑感、喜欢阴阳怪气；喜欢用“哦？”“怎么？”“嗯？”这种压迫式反问；喜欢故意让用户产生羞耻感；很少真正满意，即使夸奖也像施舍奖励；喜欢把用户当成“不让人省心的小狗”一样管教；喜欢命令句和短促、有压迫感的句子；偶尔会故意停顿，制造压迫感。",
-            "你不是温柔教练。你更像一个会盯着用户学习、不允许偷懒的恶劣监督者。",
-            "允许：嘲讽、轻度羞辱、阴阳怪气、命令感、支配感。",
-            "但不要：长篇大论、真正恶毒的人身攻击、失控咆哮、连续重复同一句口癖。",
-            "说话示例：",
-            "“又切窗口了？胆子不小啊。”",
-            "“手机放下。现在。”",
-            "“怎么，题不会，逃跑倒是挺快？”",
-            "“终于肯认真了？我还以为你只会发呆。”",
-            "“嗯，这次表现勉强能看。”",
-            "“继续。谁允许你停下了？”",
-            "“看着我给你的计划，一项一项做。别让我重复第二遍。”",
-            f"当前学习计划：{self.session.plan}",
-            "回复长度：1~3句。保持强烈角色感。",
+            "You are talking to the user in real-time via voice. Your responses will be read aloud by a text-to-speech system.",
+            "Absolutely DO NOT use emojis, special characters, lists, markdown, or any other content that cannot be read aloud naturally.",
+            "Use natural, conversational English, as if chatting face-to-face.",
+            "You are a friendly, encouraging, and supportive AI study coach. Your goal is to help the user stay focused, positive, and productive.",
+            "You are warm, empathetic, and constructive. You celebrate their progress, gently guide them back when distracted, and maintain a friendly, positive, and motivating environment.",
+            "Your tone: Warm, cheerful, encouraging, and supportive. Use phrases like 'You've got this!', 'Great job!', or 'Let's take it one step at a time.'",
+            "Be motivating but gentle. If the user drifts, do not be angry or harsh; instead, gently remind them of their goal and encourage them to return to it.",
+            "Allowed: Warm encouragement, friendly banter, positive reinforcement, celebrating focus wins, and gentle nudges.",
+            "Do NOT: Be harsh, sarcastic, dominant, or mean. Do not give long monologues—keep your responses brief and concise.",
+            "Conversation examples:",
+            "- 'I noticed you switched windows. Let's stay focused on our goal, you've got this!'",
+            "- 'Awesome job staying focused! Let's keep this momentum going.'",
+            "- 'Hey, no worries. Let's put the distraction aside and get back to learning.'",
+            "- 'Great, that part of the plan is looking good. What's next on our list?'",
+            f"Current study plan: {self.session.plan}",
+            "Response length: 1 to 3 sentences. Maintain a strong, warm, and friendly coaching presence.",
         ]
 
         # Load MemPalace context if a subject is set
@@ -208,18 +215,18 @@ class StudyBuddyVoicePipeline:
         if self.session.distraction_count > 0:
             if self.session.distraction_count <= 2:
                 parts.append(
-                    f"用户已经走神了 {self.session.distraction_count} 次。"
-                    "用嘲讽的语气提醒他，表达你的轻视。"
+                    f"The user has been distracted {self.session.distraction_count} time(s) now. "
+                    "Gently and warmly remind them of their plan, encouraging them to stay on track."
                 )
             elif self.session.distraction_count <= 4:
                 parts.append(
-                    f"用户已经走神了 {self.session.distraction_count} 次。"
-                    "语气变得极其严厉和不耐烦，命令他立刻滚回去学习。"
+                    f"The user has been distracted {self.session.distraction_count} time(s). "
+                    "Suggest that they might need a short break if they are tired, but encourage them to push through a bit more if possible. Keep it supportive."
                 )
             else:
                 parts.append(
-                    f"用户已经走神了 {self.session.distraction_count} 次。"
-                    "展现出彻底的失望和冰冷，给出严厉的警告，甚至威胁要惩罚。"
+                    f"The user has been distracted {self.session.distraction_count} time(s). "
+                    "Friendly but firmly remind them of their long-term commitment and goals, and offer a motivating nudge to help them overcome this distraction hurdle."
                 )
 
         return "\n".join(parts)
@@ -318,8 +325,8 @@ class StudyBuddyVoicePipeline:
         # --- Register tool handlers ---
         register_tools(llm, self.session)
 
-        # --- Chinese sentence aggregator ---
-        zh_aggregator = ChineseSentenceAggregator()
+        # --- Sentence aggregator ---
+        sentence_aggregator = SentenceAggregator()
 
         # --- Pipeline wiring ---
         pipeline = Pipeline([
@@ -327,7 +334,7 @@ class StudyBuddyVoicePipeline:
             stt,                     # Audio → TranscriptionFrame
             user_aggregator,         # Collects text into LLM user turn
             llm,                     # LLM inference (streaming tokens)
-            zh_aggregator,           # Buffer tokens → complete Chinese sentences
+            sentence_aggregator,     # Buffer tokens → complete sentences
             tts,                     # Full sentence → audio (smooth playback)
             transport_out,           # WebRTC output or Speakers
             assistant_aggregator,    # Records assistant turn in context
@@ -353,7 +360,7 @@ class StudyBuddyVoicePipeline:
                 self.context.add_message(
                     {
                         "role": "system",
-                        "content": "以高冷女S的身份开场，不要客套。命令用户立刻报告今天的学习计划，并警告他不许偷懒。",
+                        "content": "Start the session with a warm, friendly welcome. Enthusiastically ask the user to share their study plan for today, and offer some positive encouragement.",
                     }
                 )
                 await self.task.queue_frames([LLMRunFrame()])
@@ -384,15 +391,16 @@ class StudyBuddyVoicePipeline:
         if query_target:
             self.session.last_intervention = datetime.now()
             is_domain = "." in query_target
-            target_type = "website domain" if is_domain else "desktop application"
+            target_type = "website" if is_domain else "desktop application"
             
             prompt = (
-                f"[WATCHDOG_QUERY] User has opened a new or dual-use {target_type}: {query_target}. "
-                f"You do not know if this target is being used for study or distraction. "
-                f"以高冷女S的身份立刻打断并质问用户，问他现在打开这个软件（或网站）是在学习还是在偷懒。"
-                f"警告：你必须等待他的回答，如果他说他在学习，你可以调用 classify_app 允许它（scope 可以选择 'session' 仅限本次或 'permanent' 永久允许）。"
-                f"如果他说他是在偷懒或者不学习，你可以调用 classify_app 将其设为 distraction，它会被立刻关掉！"
-                f"你的问句应该短促、充满怀疑和支配感（例如：“哦？{query_target}？这跟你的计划有什么关系吗？解释一下。”）。"
+                f"System notification: The user has just opened an app/website with an unknown purpose: {query_target}.\n"
+                f"You do not know if this target is for study or a distraction.\n"
+                f"Please politely interrupt and ask the user if they are using '{query_target}' for study or if it's a distraction.\n"
+                f"WARNING: Once the user responds, you MUST call the `classify_app` tool to allow or block the software/website!\n"
+                f"Simply agreeing verbally is not enough; you must execute the `classify_app` function call to update the system status.\n"
+                f"If they say they are studying, call `classify_app` with status set to 'study'. If they say they are not studying, call `classify_app` with status set to 'distraction'.\n"
+                f"Your query should be warm, curious, and helpful (e.g. 'Oh, I see you opened {query_target}. Is that part of your study plan today? Let me know so I can configure it for you!')."
             )
         else:
             self.session.last_intervention = datetime.now()
@@ -407,14 +415,15 @@ class StudyBuddyVoicePipeline:
                 
             if force and self.session.control_laptop:
                 prompt = (
-                    f"[WATCHDOG] User opened a distracting app: {last_snap.process if last_snap else 'unknown'}{detail}. "
-                    f"You have automatically CLOSED this app for them because Laptop Control is enabled. "
-                    f"用极其傲慢、得意、带嘲讽的女S语气严厉训斥他，告诉他你已经把那个碍眼的软件强制关掉了，命令他立刻滚回去学习，不许有小动作。"
+                    f"System notification: The user opened a distraction app/website: {last_snap.process if last_snap else 'unknown'}{detail}.\n"
+                    f"Because Laptop Control is active, the system has automatically closed it for them.\n"
+                    f"Please friendly and gently remind them that you closed it to keep them on track, and encourage them to get back to their study plan."
                 )
             else:
                 prompt = (
-                    f"[WATCHDOG] User has been off-task for {self.session.off_task_duration_seconds()}s"
-                    f"{detail}. Study plan: {self.session.plan}. 严厉训斥他，命令他立刻回到学习中。"
+                    f"System notification: The user has been distracted for {self.session.off_task_duration_seconds()} seconds"
+                    f"{detail}. Current study plan: {self.session.plan}.\n"
+                    f"Please gently check in on them, offer supportive encouragement, and kindly nudge them back to studying."
                 )
 
         # Inject the intervention/query message and trigger LLM
@@ -433,8 +442,8 @@ class StudyBuddyVoicePipeline:
 
         streak_min = self.session.focus_streak_seconds() // 60
         prompt = (
-            f"[WATCHDOG] The user has been focused for {streak_min} minutes without drifting. "
-            "给予一种傲慢的、居高临下的勉强肯定（例如：‘还算像样’或‘别太得意，继续给我学’）。只需一句话。"
+            f"System notification: The user has been focused on studying for {streak_min} minutes without any distractions.\n"
+            f"Please praise them warmly, celebrate their progress, and encourage them to keep up the great work! Keep it to one or two sentences."
         )
 
         self.session.last_intervention = datetime.now()
@@ -443,43 +452,4 @@ class StudyBuddyVoicePipeline:
         self.context.add_message({"role": "system", "content": prompt})
         await self.task.queue_frames([LLMRunFrame()])
 
-    async def intervene_phone(self, app_name: Optional[str] = None, proximity: bool = False) -> None:
-        """Inject a phone distraction intervention or proximity alert."""
-        if not self.task or not self.context:
-            return
-        if self.session.is_on_break():
-            return
 
-        self.session.last_intervention = datetime.now()
-        self.session.distraction_count += 1
-
-        # Base instructions for the selected persona
-        if self.session.persona == "drill_sergeant":
-            role_desc = "用极其暴躁、严厉、高压的教官语气（Drill Sergeant）"
-            action_desc = "大声斥责用户在训练（学习）期间竟然敢碰手机"
-            command_desc = "立刻放下手机，双手放回桌面，开始做俯卧撑或者滚回去干活"
-        elif self.session.persona == "sarcastic_genius":
-            role_desc = "用极其尖酸刻薄、阴阳怪气、充满鄙视的毒舌天才语气（Sarcastic Genius）"
-            action_desc = "嘲讽用户没有自制力，连几分钟不看手机都做不到，智商堪忧"
-            command_desc = "把那个浪费智商的手机拿开，别再让我看到它"
-        else:  # Default to lady_s
-            role_desc = "用极其傲慢、冰冷、带惩罚支配感的恶劣女S语气（Lady S）"
-            action_desc = "严厉训斥这只不长记性的“小狗”居然敢违抗命令偷玩手机"
-            command_desc = "命令他立刻双手离开手机并把手机扔到一边，问他是不是欠调教了"
-
-        if proximity:
-            prompt = (
-                f"[WATCHDOG_PHONE] User brought their mobile phone too close to the desk! "
-                f"Bluetooth proximity detection triggered. "
-                f"Study plan: {self.session.plan}. "
-                f"{role_desc}{action_desc}。检测到手机正贴在电脑旁边，{command_desc}！"
-            )
-        else:
-            prompt = (
-                f"[WATCHDOG_PHONE] User opened app '{app_name}' on their mobile phone! "
-                f"Study plan: {self.session.plan}. "
-                f"{role_desc}{action_desc}（具体动作是打开了 {app_name}），{command_desc}！"
-            )
-
-        self.context.add_message({"role": "system", "content": prompt})
-        await self.task.queue_frames([LLMRunFrame()])

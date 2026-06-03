@@ -461,6 +461,12 @@
             transition: var(--transition-smooth);
             border: 2px solid transparent;
             position: relative;
+            font-size: 0.65rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-main);
         }
 
         .calendar-cell:hover {
@@ -473,11 +479,40 @@
         }
 
         /* Calendar heat steps */
-        .heat-0 { background-color: #f1f5f9; }
-        .heat-1 { background-color: #e0f2fe; }
-        .heat-2 { background-color: #7dd3fc; }
-        .heat-3 { background-color: #0ea5e9; }
-        .heat-4 { background-color: #0369a1; }
+        .heat-0 { background-color: #f1f5f9; color: var(--text-muted); }
+        .heat-1 { background-color: #e0f2fe; color: #0369a1; }
+        .heat-2 { background-color: #7dd3fc; color: #0369a1; }
+        .heat-3 { background-color: #0ea5e9; color: #ffffff; }
+        .heat-4 { background-color: #0369a1; color: #ffffff; }
+
+        .calendar-header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .month-switcher {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .month-switcher button {
+            padding: 4px 10px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        #currentMonthYear {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            font-size: 0.95rem;
+            min-width: 100px;
+            text-align: center;
+            color: var(--text-main);
+        }
 
         .calendar-legend {
             display: flex;
@@ -768,7 +803,6 @@
     <header>
         <div class="logo">Study Buddy Coach</div>
         <div class="header-actions">
-            <button class="btn-webhook" id="openWebhookBtn">📱 Webhook Guide</button>
             <div id="statusBadge" class="status-badge">
                 <span class="dot"></span>
                 <span class="text">Offline</span>
@@ -821,7 +855,14 @@
         <div class="right-col">
             <!-- Calendar Card -->
             <div class="panel">
-                <div class="panel-title">Focus Log (Past 28 Days)</div>
+                <div class="calendar-header-container">
+                    <div class="panel-title" style="margin-bottom: 0;">Focus Log</div>
+                    <div class="month-switcher">
+                        <button id="prevMonthBtn" class="btn-webhook">&lt;</button>
+                        <span id="currentMonthYear"></span>
+                        <button id="nextMonthBtn" class="btn-webhook">&gt;</button>
+                    </div>
+                </div>
                 <div class="calendar-grid" id="calendarGrid">
                     <!-- Column titles (Sun to Sat) -->
                     <div class="calendar-day-header">S</div>
@@ -854,34 +895,7 @@
         </div>
     </main>
 
-    <!-- Webhook Modal Overlay -->
-    <div class="modal-overlay" id="webhookModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title">📱 Mobile Phone Guard Webhook Setup</div>
-                <button class="modal-close" id="closeWebhookBtn">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>Configure a webhook in less than a minute to alert the Study Coach when you unlock your phone or launch distracting apps:</p>
-                
-                <h4>iOS (iPhone Shortcuts)</h4>
-                <ol>
-                    <li>Open the <strong>Shortcuts</strong> app and select the <strong>Automation</strong> tab &rarr; Click <strong>+</strong>.</li>
-                    <li>Choose <strong>App</strong> &rarr; Select distracting apps (e.g. WeChat, TikTok, Instagram).</li>
-                    <li>Check "Is Opened", select <strong>Run Immediately</strong>.</li>
-                    <li>Add action: <strong>Get Contents of URL</strong>.</li>
-                    <li>Enter this URL: <br><code id="webhookUrlExample">http://{{LOCAL_IP}}:7860/phone_activity?app=WeChat</code></li>
-                </ol>
 
-                <h4>Android (MacroDroid)</h4>
-                <ol>
-                    <li>Add Macro &rarr; Trigger: <strong>Application Launched</strong> (select apps) or <strong>Screen Unlocked</strong>.</li>
-                    <li>Action: <strong>HTTP GET</strong>.</li>
-                    <li>Enter the same URL structure replacing the IP with your computer's local IP address.</li>
-                </ol>
-            </div>
-        </div>
-    </div>
 
     <footer>
         AI Study Buddy — Dynamic Focus & WebRTC Coaching Dashboard
@@ -896,9 +910,7 @@
         const planInput = document.getElementById('planInput');
         const controlLaptopToggle = document.getElementById('controlLaptopToggle');
         
-        const openWebhookBtn = document.getElementById('openWebhookBtn');
-        const closeWebhookBtn = document.getElementById('closeWebhookBtn');
-        const webhookModal = document.getElementById('webhookModal');
+
 
         // Timer references
         const timerWrapper = document.getElementById('timerWrapper');
@@ -913,24 +925,51 @@
         const calendarGrid = document.getElementById('calendarGrid');
         const detailsTitle = document.getElementById('detailsTitle');
         const activityDetails = document.getElementById('activityDetails');
+        const prevMonthBtn = document.getElementById('prevMonthBtn');
+        const nextMonthBtn = document.getElementById('nextMonthBtn');
+        const currentMonthYear = document.getElementById('currentMonthYear');
 
         let callFrame = null;
         let statsInterval = null;
         let remoteAudioElements = {};
         
-        let selectedDurationMinutes = parseInt(durationMinutesInput.value) || 25;
         let studyHistory = {};
-        let selectedDateStr = new Date().toISOString().split('T')[0];
+        let selectedDurationMinutes = parseInt(durationMinutesInput.value) || 25;
+        
+        const todayDateObj = new Date();
+        let currentYear = todayDateObj.getFullYear();
+        let currentMonth = todayDateObj.getMonth();
+
+        function getLocalDateString(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        let selectedDateStr = getLocalDateString(new Date());
+
+        prevMonthBtn.addEventListener('click', () => {
+            currentMonth--;
+            if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            }
+            renderCalendar();
+        });
+
+        nextMonthBtn.addEventListener('click', () => {
+            currentMonth++;
+            if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
+            renderCalendar();
+        });
 
         // Track time updates locally
         let elapsedSeconds = 0;
 
-        // Modal triggers
-        openWebhookBtn.addEventListener('click', () => webhookModal.classList.add('open'));
-        closeWebhookBtn.addEventListener('click', () => webhookModal.classList.remove('open'));
-        webhookModal.addEventListener('click', (e) => {
-            if (e.target === webhookModal) webhookModal.classList.remove('open');
-        });
+
 
         // Track custom minutes input changes
         durationMinutesInput.addEventListener('change', () => {
@@ -1177,26 +1216,31 @@
             calendarGrid.innerHTML = '';
             headers.forEach(h => calendarGrid.appendChild(h));
 
-            // Generate 28 days ending with today, padded at start to line up weekdays
-            const today = new Date();
-            const datesList = [];
-            for (let i = 27; i >= 0; i--) {
-                const d = new Date();
-                d.setDate(today.getDate() - i);
-                datesList.push(d);
-            }
+            // Set the month/year label
+            const monthNames = [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            ];
+            currentMonthYear.textContent = `${monthNames[currentMonth]} ${currentYear}`;
 
-            // Find weekday of first date in list to pad
-            const firstDayWeekday = datesList[0].getDay();
+            // Find first day of the current month
+            const firstDay = new Date(currentYear, currentMonth, 1);
+            const firstDayWeekday = firstDay.getDay();
+
+            // Find number of days in the current month
+            const numDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+            // Pad the start to align weekdays
             for (let p = 0; p < firstDayWeekday; p++) {
                 const pad = document.createElement('div');
                 pad.style.visibility = 'hidden';
                 calendarGrid.appendChild(pad);
             }
 
-            // Render active day cells
-            datesList.forEach(date => {
-                const dateStr = date.toISOString().split('T')[0];
+            // Generate cells for each day of the month
+            for (let day = 1; day <= numDays; day++) {
+                const date = new Date(currentYear, currentMonth, day);
+                const dateStr = getLocalDateString(date);
                 const dayData = studyHistory[dateStr] || { total_focus_seconds: 0 };
                 const focusMinutes = dayData.total_focus_seconds / 60;
 
@@ -1209,10 +1253,11 @@
 
                 const cell = document.createElement('div');
                 cell.className = `calendar-cell ${heatClass}`;
+                cell.textContent = day;
                 if (dateStr === selectedDateStr) cell.classList.add('active');
                 
                 // Show tooltip on hover
-                const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 cell.title = `${formattedDate}: ${Math.round(focusMinutes)} min focused`;
 
                 cell.addEventListener('click', () => {
@@ -1224,13 +1269,14 @@
                 });
 
                 calendarGrid.appendChild(cell);
-            });
+            }
         }
 
         // Display time-spent details on apps/websites
         function loadDetailsForDate(dateStr) {
             const dayData = studyHistory[dateStr] || { total_focus_seconds: 0, apps: {} };
-            const dateObj = new Date(dateStr);
+            const parts = dateStr.split('-');
+            const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
             const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
             
             detailsTitle.textContent = `Activity Details — ${formattedDate}`;
@@ -1504,9 +1550,6 @@
         // Initialize historical dashboard statistics on window load
         window.addEventListener('DOMContentLoaded', () => {
             fetchHistoryAndRenderCalendar();
-            // Dynamic webhook URL host replacement
-            const currentHost = window.location.host || 'localhost:7860';
-            document.getElementById('webhookUrlExample').textContent = `http://${currentHost}/phone_activity?app=WeChat`;
         });
     </script>
 </body>

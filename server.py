@@ -134,40 +134,7 @@ async def connect(request: Request):
         }
     )
 
-@app.api_route("/phone_activity", methods=["GET", "POST"])
-async def phone_activity(request: Request):
-    """Receive notifications when the user interacts with their mobile phone."""
-    global active_pipeline, active_session
-    if not active_pipeline or not active_session:
-        return {"status": "no_active_session"}
 
-    # Extract parameters from query string or JSON payload
-    app_name = request.query_params.get("app", "Phone")
-    event = request.query_params.get("event", "unlock")
-
-    if request.method == "POST":
-        try:
-            data = await request.json()
-            app_name = data.get("app", app_name)
-            event = data.get("event", event)
-        except Exception:
-            pass
-
-    logger.warning("Phone activity webhook received: app=%s, event=%s", app_name, event)
-
-    # Enforce phone intervention cooldown
-    since_last = active_session.seconds_since_last_intervention()
-    if since_last is not None and since_last < config.PHONE_COOLDOWN_SECONDS:
-        logger.info("Phone activity warning suppressed due to cooldown (%ds since last)", since_last)
-        return {"status": "cooldown_active"}
-
-    # Trigger verbal phone scolding
-    asyncio.create_task(active_pipeline.intervene_phone(app_name=app_name))
-
-    return {
-        "status": "success",
-        "distraction_count": active_session.distraction_count,
-    }
 
 @app.post("/activity")
 async def update_activity(request: Request):
@@ -238,14 +205,13 @@ async def update_activity(request: Request):
             
             if active_session.control_laptop:
                 logger.warning("watchdog update: distracting process detected! Requiring client to close: %s", process)
-                asyncio.create_task(active_pipeline.maybe_intervene(force=True))
                 action_payload = {
                     "action": "close_process",
                     "target_pid": snapshot.pid,
                     "target_process": snapshot.process,
                 }
-            else:
-                asyncio.create_task(active_pipeline.maybe_intervene(force=False))
+            
+            asyncio.create_task(active_pipeline.maybe_intervene(force=False))
                 
         elif snapshot.is_on_task is True:
             active_session.off_task_start = None
@@ -306,16 +272,13 @@ async def _run_bot(room_url: str, token: str, plan: str, persona: str, subject: 
     try:
         logger.info(f"Bot joining room: {room_url}")
         await active_pipeline.start()
+        logger.info("Bot session ended normally.")
+        active_pipeline = None
+        active_session = None
     except Exception as e:
         logger.error(f"Bot error (Voice coach disabled, running local watchdog mode): {e}")
         # Keep active_session alive to allow local watchdog and stats tracking
-        return
-    finally:
-        # Only clean up if the pipeline successfully completed its run loop
-        if active_pipeline:
-            logger.info("Bot session ended normally.")
-            active_pipeline = None
-            active_session = None
+        active_pipeline = None
 
 if __name__ == "__main__":
     import uvicorn

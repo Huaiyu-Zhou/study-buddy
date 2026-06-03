@@ -21,13 +21,13 @@ DAILY_API_URL: str = "https://api.daily.co/v1"
 # Deepgram (Phase 7 - Cloud STT)
 DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "")
 DEEPGRAM_MODEL: str = "nova-2"
-DEEPGRAM_LANGUAGE: str = "zh-CN"
+DEEPGRAM_LANGUAGE: str = "en-US"  # Set to English (US) to transcribe user speech during English coaching sessions
 
 # MemPalace (Phase 6)
 MEMPALACE_PALACE_PATH: str = os.getenv("MEMPALACE_PALACE_PATH", os.path.expanduser("~/.mempalace/palace"))
 
 # Watchdog polling
-WATCHDOG_INTERVAL_SECONDS: int = 30
+WATCHDOG_INTERVAL_SECONDS: int = 5
 IDLE_THRESHOLD_SECONDS: int = 180       # 3 min idle = stepped away, pause off-task timer
 
 # Coaching thresholds
@@ -64,6 +64,7 @@ KNOWN_DISTRACTION_DOMAINS: set[str] = {
     "facebook.com",
     "twitch.tv",
     "9gag.com",
+    "spotify.com",
 }
 
 KNOWN_STUDY_DOMAINS: set[str] = {
@@ -189,5 +190,4 @@ def add_dynamic_classification(name: str, is_domain: bool, status: str):
 # Load dynamic rules on module import
 load_dynamic_rules()
 
-# --- Mobile Guard Configuration ---
-PHONE_COOLDOWN_SECONDS: int = 60
+

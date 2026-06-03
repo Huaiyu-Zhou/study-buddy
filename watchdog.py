@@ -122,8 +122,15 @@ def get_browser_url(process_name: str) -> Optional[str]:
         if address_bar is None:
             return None
         url: str = address_bar.CurrentValue
-        if url and (url.startswith("http://") or url.startswith("https://")):
-            return url
+        if url:
+            url = url.strip()
+            # If the browser stripped the protocol (e.g. edge shows "youtube.com"), prepend https://
+            if not (url.startswith("http://") or url.startswith("https://")):
+                parts = url.split('/')
+                if len(parts) > 0 and '.' in parts[0]:
+                    url = "https://" + url
+            if url.startswith("http://") or url.startswith("https://"):
+                return url
         return None
     except Exception:
         return None
@@ -194,6 +201,18 @@ async def watchdog_loop(
         process, title, pid = get_active_window_info()
         idle = get_idle_seconds()
         url = get_browser_url(process)
+
+        # Fallback to parsing window title if URL was not retrieved via UI Automation for a browser
+        if not url and process in CHROMIUM_PROCESSES and title:
+            title_lower = title.lower()
+            import config
+            all_domains = KNOWN_DISTRACTION_DOMAINS.union(KNOWN_STUDY_DOMAINS).union(config.KNOWN_DUAL_USE_DOMAINS)
+            for domain in all_domains:
+                keyword = domain.split('.')[0]
+                if keyword in title_lower:
+                    url = f"https://{domain}"
+                    logger.info("watchdog fallback: extracted URL from browser title: %r -> %s", title, url)
+                    break
 
         snapshot = WindowSnapshot(
             timestamp=datetime.now(),
