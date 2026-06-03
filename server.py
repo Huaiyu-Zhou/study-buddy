@@ -315,6 +315,17 @@ async def stop_session():
     active_session = None
     return {"status": "success"}
 
+@app.post("/congratulate")
+async def congratulate():
+    """Trigger a congratulatory coach interruption when study goals are complete."""
+    global active_pipeline
+    if active_pipeline:
+        logger.info("Session complete: triggering congrats speech.")
+        asyncio.create_task(active_pipeline.trigger_congrats())
+        return {"status": "success"}
+    return {"status": "no_active_session"}
+
+
 
 async def _run_bot(room_url: str, token: str, plan: str, persona: str, subject: str, control_laptop: bool):
     """Run the Study Buddy pipeline as a bot inside a Daily room."""

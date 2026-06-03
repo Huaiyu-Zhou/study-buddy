@@ -453,4 +453,17 @@ class StudyBuddyVoicePipeline:
         self.context.add_message({"role": "system", "content": prompt})
         await self.task.queue_frames([LLMRunFrame()])
 
+    async def trigger_congrats(self) -> None:
+        """Inject a congratulatory speech when the user successfully finishes their study goal."""
+        if not self.task or not self.context:
+            return
+            
+        prompt = (
+            f"System notification: The user has successfully completed their study session for their goal: '{self.session.plan}'!\n"
+            "Please praise them enthusiastically, congratulate them warmly on their focus and achievement, and wrap up the session with positive energy. Keep it to two or three sentences."
+        )
+        
+        self.context.add_message({"role": "system", "content": prompt})
+        await self.task.queue_frames([LLMRunFrame()])
+
 

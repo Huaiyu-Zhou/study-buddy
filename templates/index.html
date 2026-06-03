@@ -156,8 +156,8 @@
             padding: 40px;
             display: grid;
             grid-template-columns: 460px 1fr;
-            gap: 40px;
-            align-items: start;
+            gap: 30px;
+            align-items: stretch; /* Stretch columns to equal height */
         }
 
         .panel {
@@ -177,14 +177,75 @@
         .left-col {
             display: flex;
             flex-direction: column;
-            gap: 30px;
+            height: 100%;
+        }
+
+        .left-col > .panel {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
         }
 
         .right-col {
             display: flex;
             flex-direction: column;
             gap: 30px;
+            height: 100%;
         }
+
+        .right-col > .panel:last-child {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .full-width-col {
+            grid-column: 1 / span 2;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        /* Completed green button state */
+        .btn-stop-study.completed {
+            background: #10b981 !important; /* Vibrant green */
+            color: #ffffff !important;
+            border-color: #059669 !important;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25) !important;
+        }
+
+        .btn-stop-study.completed:hover {
+            background: #059669 !important;
+            border-color: #047857 !important;
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
+        }
+
+        /* Glowing white timer overlay text (On top of the water level) */
+        .timer-wrapper.active .timer-status,
+        .timer-wrapper.state-completed .timer-status {
+            color: #ffffff !important;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 0 8px rgba(255, 255, 255, 0.6) !important;
+        }
+        
+        .timer-wrapper.active .timer-display,
+        .timer-wrapper.state-completed .timer-display,
+        .timer-wrapper.active .custom-duration-input,
+        .timer-wrapper.state-completed .custom-duration-input {
+            color: #ffffff !important;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 15px rgba(255, 255, 255, 0.8) !important;
+        }
+        
+        .timer-wrapper.active .timer-subtext,
+        .timer-wrapper.state-completed .timer-subtext {
+            color: rgba(255, 255, 255, 0.95) !important;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+        }
+        
+        .timer-wrapper.active .duration-unit,
+        .timer-wrapper.state-completed .duration-unit {
+            color: rgba(255, 255, 255, 0.9) !important;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+        }
+
 
         .panel-title {
             font-family: 'Outfit', sans-serif;
@@ -1039,7 +1100,7 @@
     </header>
 
     <main>
-        <!-- Left column: main progress bar + Classification Rules -->
+        <!-- Left column: main progress bar -->
         <div class="left-col">
             <div class="panel">
                 <div class="panel-title">Focus Session</div>
@@ -1075,43 +1136,6 @@
                         <input type="checkbox" id="controlLaptopToggle" checked>
                         <span class="slider"></span>
                     </label>
-                </div>
-            </div>
-
-            <!-- Classification Rules Card (moved to left column for layout balance) -->
-            <div class="panel">
-                <div class="panel-title">Classification Rules</div>
-                
-                <!-- Category Tabs -->
-                <div class="classification-tabs">
-                    <button class="tab-btn active tab-study" onclick="switchRulesTab('study')">✅ Study</button>
-                    <button class="tab-btn tab-distraction" onclick="switchRulesTab('distraction')">🚫 Distractions</button>
-                    <button class="tab-btn tab-dual-use" onclick="switchRulesTab('dual_use')">❓ Dual-Use</button>
-                </div>
-
-                <!-- Rules list container -->
-                <div class="rules-list-container" id="rulesList">
-                    <!-- Dynamically populated rules -->
-                </div>
-
-                <!-- Add New Rule Form -->
-                <div class="add-rule-form">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Add Custom Rule</div>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="newRuleName" placeholder="e.g. reddit.com, discord.exe" style="flex-grow: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; outline: none; transition: var(--transition-smooth);">
-                        <select id="newRuleType">
-                            <option value="domain">Website (Domain)</option>
-                            <option value="process">App (Process)</option>
-                        </select>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <select id="newRuleCategory">
-                            <option value="study">Allowed (Study)</option>
-                            <option value="distraction">Blocked (Distraction)</option>
-                            <option value="dual_use">Dual-Use (Can be both)</option>
-                        </select>
-                        <button onclick="addRule()" class="btn-webhook" style="padding: 8px 16px; font-weight: 700;">Add Rule</button>
-                    </div>
                 </div>
             </div>
         </div>
@@ -1155,6 +1179,45 @@
                 <div class="panel-title" id="detailsTitle">Time Spent Details</div>
                 <div class="activity-details-container" id="activityDetails">
                     <div class="empty-activity">Click a day on the calendar to view application statistics.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Classification Rules Card (Full Width Row) -->
+        <div class="full-width-col">
+            <div class="panel">
+                <div class="panel-title">Classification Rules</div>
+                
+                <!-- Category Tabs -->
+                <div class="classification-tabs">
+                    <button class="tab-btn active tab-study" onclick="switchRulesTab('study')">✅ Study</button>
+                    <button class="tab-btn tab-distraction" onclick="switchRulesTab('distraction')">🚫 Distractions</button>
+                    <button class="tab-btn tab-dual-use" onclick="switchRulesTab('dual_use')">❓ Dual-Use</button>
+                </div>
+
+                <!-- Rules list container -->
+                <div class="rules-list-container" id="rulesList">
+                    <!-- Dynamically populated rules -->
+                </div>
+
+                <!-- Add New Rule Form -->
+                <div class="add-rule-form">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Add Custom Rule</div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="newRuleName" placeholder="e.g. reddit.com, discord.exe" style="flex-grow: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; outline: none; transition: var(--transition-smooth);">
+                        <select id="newRuleType">
+                            <option value="domain">Website (Domain)</option>
+                            <option value="process">App (Process)</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <select id="newRuleCategory">
+                            <option value="study">Allowed (Study)</option>
+                            <option value="distraction">Blocked (Distraction)</option>
+                            <option value="dual_use">Dual-Use (Can be both)</option>
+                        </select>
+                        <button onclick="addRule()" class="btn-webhook" style="padding: 8px 16px; font-weight: 700;">Add Rule</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1614,15 +1677,20 @@
                     } else {
                         // Completed!
                         timerDisplay.textContent = "100%";
-                        timerDisplay.style.color = "var(--accent-blue)";
+                        timerDisplay.style.color = "#ffffff";
                         timerSubtext.textContent = "Goal Achieved!";
                         timerStatus.textContent = "COMPLETED";
-                        timerStatus.style.color = "var(--accent-blue)";
+                        timerStatus.style.color = "#ffffff";
+                        
+                        // Button changes to complete study session
+                        stopBtn.textContent = 'Complete Study Session';
+                        stopBtn.classList.add('completed');
                         
                         // Congrats effect
                         if (!congratsTriggered) {
                             congratsTriggered = true;
                             triggerCongratsConfetti();
+                            fetch('/congratulate', { method: 'POST' }).catch(e => console.error("Failed to fetch congratulate speech:", e));
                         }
                     }
 
@@ -1832,6 +1900,8 @@
             stopBtn.style.display = 'none';
             startBtn.style.display = 'block';
             stopBtn.disabled = false;
+            stopBtn.textContent = 'Stop Study';
+            stopBtn.classList.remove('completed');
 
             statusBadge.className = 'status-badge';
             statusBadgeText.textContent = 'Offline';
@@ -1845,7 +1915,7 @@
             timerDisplay.style.display = 'none';
             timerDisplay.style.color = 'var(--text-main)';
             durationMinutesInput.disabled = false;
-            timerWrapper.classList.remove('active');
+            timerWrapper.classList.remove('active', 'state-completed');
 
             // Refresh history and calendar metrics
             await fetchHistoryAndRenderCalendar();
