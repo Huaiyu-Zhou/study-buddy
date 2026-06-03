@@ -2,7 +2,7 @@ import asyncio
 import logging
 import aiohttp
 
-from watchdog import get_active_window_info, get_idle_seconds, get_browser_url, terminate_process
+from watchdog import get_active_window_info, get_idle_seconds, get_browser_url, terminate_process, CHROMIUM_PROCESSES
 import config
 
 logging.basicConfig(
@@ -22,7 +22,26 @@ async def run_watchdog():
                 process, title, pid = get_active_window_info()
                 idle = get_idle_seconds()
                 url = get_browser_url(process)
-                
+
+                # Fallback: if URL extraction failed for a browser, try to
+                # match known domain keywords from the window title.
+                if not url and process in CHROMIUM_PROCESSES and title:
+                    title_lower = title.lower()
+                    all_domains = (
+                        config.KNOWN_DISTRACTION_DOMAINS
+                        | config.KNOWN_STUDY_DOMAINS
+                        | config.KNOWN_DUAL_USE_DOMAINS
+                    )
+                    for domain in all_domains:
+                        keyword = domain.split('.')[0]
+                        if keyword in title_lower:
+                            url = f"https://{domain}"
+                            logger.info(
+                                "Fallback: extracted URL from title: %r -> %s",
+                                title, url,
+                            )
+                            break
+
                 payload = {
                     "process": process,
                     "window_title": title,

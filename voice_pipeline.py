@@ -378,12 +378,15 @@ class StudyBuddyVoicePipeline:
         if self.session.is_on_break():
             return
             
-        # Always respect cooldown to avoid spamming the user every poll cycle
+        # Always respect a short anti-spam guard (30s) to avoid firing every poll cycle
         since_last = self.session.seconds_since_last_intervention()
-        if since_last is not None and since_last < config.INTERVENTION_COOLDOWN_SECONDS:
+        if since_last is not None and since_last < 30:
             return
 
         if not force:
+            # Non-forced: require full cooldown and off-task duration threshold
+            if since_last is not None and since_last < config.INTERVENTION_COOLDOWN_SECONDS:
+                return
             if self.session.off_task_duration_seconds() < config.OFF_TASK_THRESHOLD_SECONDS:
                 return
 
