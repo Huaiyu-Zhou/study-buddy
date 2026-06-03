@@ -887,53 +887,88 @@
             animation: celebrate-gold 1.5s infinite alternate ease-in-out;
         }
 
-        /* Classification tabs with bottom indicator line */
-        .classification-tabs {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 0px;
+        /* Classification Layout and Vertical Tabs styling */
+        .classification-layout {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            gap: 35px;
+            align-items: start;
         }
 
-        .tab-btn {
+        .classification-tabs-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-right: 1px solid var(--border-color);
+            padding-right: 20px;
+        }
+
+        .classification-tabs-vertical .tab-btn {
             background: transparent;
             border: none;
             font-family: inherit;
-            font-size: 0.9rem;
+            font-size: 1.05rem; /* Bigger size */
             font-weight: 700;
             color: var(--text-muted);
             cursor: pointer;
-            padding: 8px 16px;
-            position: relative;
+            padding: 12px 16px;
+            text-align: left;
+            border-left: 4px solid transparent;
+            border-radius: 8px;
             transition: var(--transition-smooth);
-            bottom: -2px;
-            border-bottom: 2px solid transparent;
+            width: 100%;
         }
 
-        .tab-btn:hover {
+        .classification-tabs-vertical .tab-btn:hover {
             color: var(--text-main);
-            transform: scale(1.02);
+            background: var(--primary-light);
+            transform: translateX(2px) scale(1.02);
         }
 
-        .tab-btn.active {
-            border-bottom-color: var(--primary);
-            color: var(--primary);
+        .classification-tabs-vertical .tab-btn.active {
+            background: var(--primary-light);
         }
 
-        .tab-btn.active.tab-study {
-            border-bottom-color: var(--accent-green);
+        .classification-tabs-vertical .tab-btn.active.tab-study {
+            border-left-color: var(--accent-green);
             color: var(--accent-green);
+            background: rgba(16, 185, 129, 0.05);
         }
 
-        .tab-btn.active.tab-distraction {
-            border-bottom-color: var(--accent-crimson);
+        .classification-tabs-vertical .tab-btn.active.tab-distraction {
+            border-left-color: var(--accent-crimson);
             color: var(--accent-crimson);
+            background: rgba(239, 68, 68, 0.04);
         }
 
-        .tab-btn.active.tab-dual-use {
-            border-bottom-color: var(--accent-indigo);
+        .classification-tabs-vertical .tab-btn.active.tab-dual-use {
+            border-left-color: var(--accent-indigo);
             color: var(--accent-indigo);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .rules-list-container {
+            max-height: 250px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 6px;
+        }
+
+        /* Modern customized scrollbar for rules list container */
+        .rules-list-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .rules-list-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .rules-list-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+        .rules-list-container::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
         }
 
         /* Rule Row list items with tags & badges */
@@ -1105,10 +1140,7 @@
             <div class="panel">
                 <div class="panel-title">Focus Session</div>
                 
-                <div class="goal-input-container">
-                    <label for="planInput">Study Goal</label>
-                    <input type="text" id="planInput" class="goal-input" value="Practice math problems" placeholder="e.g. Write essay, Code API">
-                </div>
+                <input type="hidden" id="planInput" value="Study Session">
 
                 <div class="timer-wrapper" id="timerWrapper">
                     <canvas id="fluidCanvas" width="640" height="640" style="position: absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; z-index:1; pointer-events:none;"></canvas>
@@ -1188,35 +1220,28 @@
             <div class="panel">
                 <div class="panel-title">Classification Rules</div>
                 
-                <!-- Category Tabs -->
-                <div class="classification-tabs">
-                    <button class="tab-btn active tab-study" onclick="switchRulesTab('study')">✅ Study</button>
-                    <button class="tab-btn tab-distraction" onclick="switchRulesTab('distraction')">🚫 Distractions</button>
-                    <button class="tab-btn tab-dual-use" onclick="switchRulesTab('dual_use')">❓ Dual-Use</button>
-                </div>
-
-                <!-- Rules list container -->
-                <div class="rules-list-container" id="rulesList">
-                    <!-- Dynamically populated rules -->
-                </div>
-
-                <!-- Add New Rule Form -->
-                <div class="add-rule-form">
-                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Add Custom Rule</div>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="newRuleName" placeholder="e.g. reddit.com, discord.exe" style="flex-grow: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; outline: none; transition: var(--transition-smooth);">
-                        <select id="newRuleType">
-                            <option value="domain">Website (Domain)</option>
-                            <option value="process">App (Process)</option>
-                        </select>
+                <div class="classification-layout">
+                    <!-- Left side: Vertical Tabs -->
+                    <div class="classification-tabs-vertical">
+                        <button class="tab-btn active tab-study" onclick="switchRulesTab('study')">✅ Study</button>
+                        <button class="tab-btn tab-distraction" onclick="switchRulesTab('distraction')">🚫 Distractions</button>
+                        <button class="tab-btn tab-dual-use" onclick="switchRulesTab('dual_use')">❓ Dual-Use</button>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <select id="newRuleCategory">
-                            <option value="study">Allowed (Study)</option>
-                            <option value="distraction">Blocked (Distraction)</option>
-                            <option value="dual_use">Dual-Use (Can be both)</option>
-                        </select>
-                        <button onclick="addRule()" class="btn-webhook" style="padding: 8px 16px; font-weight: 700;">Add Rule</button>
+
+                    <!-- Right side: Rules Content (list + add rule form) -->
+                    <div style="display: flex; flex-direction: column; gap: 20px; flex-grow: 1;">
+                        <!-- Rules list container -->
+                        <div class="rules-list-container" id="rulesList">
+                            <!-- Dynamically populated rules -->
+                        </div>
+
+                        <!-- Add New Rule Form -->
+                        <div class="add-rule-form">
+                            <div style="display: flex; gap: 8px;">
+                                <input type="text" id="newRuleName" placeholder="Enter website domain or app name to add..." onkeydown="if(event.key === 'Enter') addRule()" style="flex-grow: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; outline: none; transition: var(--transition-smooth);">
+                                <button onclick="addRule()" class="btn-webhook" style="padding: 10px 20px; font-weight: 700; flex-shrink: 0; border-radius: 8px;">Add</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1938,9 +1963,9 @@
         window.switchRulesTab = function(tab) {
             currentRulesTab = tab;
             // Update tab button styles
-            const tabButtons = document.querySelectorAll('.classification-tabs .tab-btn');
+            const tabButtons = document.querySelectorAll('.classification-tabs-vertical .tab-btn');
             tabButtons.forEach(btn => {
-                btn.style.color = 'var(--text-muted)';
+                btn.style.color = '';
                 btn.classList.remove('active');
             });
             
@@ -1948,9 +1973,6 @@
             const activeBtn = Array.from(tabButtons).find(btn => btn.getAttribute('onclick').includes(tab));
             if (activeBtn) {
                 activeBtn.classList.add('active');
-                if (tab === 'study') activeBtn.style.color = 'var(--accent-green)';
-                else if (tab === 'distraction') activeBtn.style.color = 'var(--accent-crimson)';
-                else if (tab === 'dual_use') activeBtn.style.color = 'var(--accent-indigo)';
             }
             renderRulesList();
         }
@@ -1991,14 +2013,11 @@
 
         window.addRule = async function() {
             const nameInput = document.getElementById('newRuleName');
-            const typeSelect = document.getElementById('newRuleType');
-            const catSelect = document.getElementById('newRuleCategory');
-            
             const name = nameInput.value.trim().toLowerCase();
             if (!name) return;
             
-            const isDomain = (typeSelect.value === 'domain');
-            const status = catSelect.value;
+            const isDomain = name.includes('.') && !name.endsWith('.exe');
+            const status = currentRulesTab;
             
             try {
                 const res = await fetch('/classify', {
