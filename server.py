@@ -174,10 +174,28 @@ async def update_activity(request: Request):
 
     action_payload = {}
 
+    # Browser processes where we should prefer URL domain over process name
+    _BROWSER_PROCESSES = {"msedge.exe", "chrome.exe", "brave.exe", "opera.exe", "firefox.exe"}
+
     # Process task state machine and save stats to history manager
     if idle < config.IDLE_THRESHOLD_SECONDS:
-        # Determine target name
-        target = urlparse(snapshot.url).netloc.lower() if snapshot.url else snapshot.process
+        # Determine target name — prefer URL domain for browsers
+        if snapshot.url:
+            target = urlparse(snapshot.url).netloc.lower()
+            if target.startswith("www."):
+                target = target[4:]
+        elif process.lower() in _BROWSER_PROCESSES and title:
+            # Fallback: extract domain hints from window title for browsers
+            # Edge titles often look like "Instagram - Google Chrome" or "reddit: the front page - Microsoft Edge"
+            target = process  # default
+            import re
+            # Try to find a domain-like pattern in the title
+            domain_match = re.search(r'([a-zA-Z0-9-]+\.[a-zA-Z]{2,})', title)
+            if domain_match:
+                target = domain_match.group(1).lower()
+        else:
+            target = process
+        
         if target.startswith("www."):
             target = target[4:]
         is_focus = (snapshot.is_on_task is True)
@@ -190,14 +208,14 @@ async def update_activity(request: Request):
 
         if snapshot.is_on_task is None:
             # Query trigger logic for new/dual-use app
-            target = urlparse(snapshot.url).netloc.lower() if snapshot.url else snapshot.process
-            if target.startswith("www."):
-                target = target[4:]
+            query_target = urlparse(snapshot.url).netloc.lower() if snapshot.url else snapshot.process
+            if query_target.startswith("www."):
+                query_target = query_target[4:]
                 
-            if target and target not in active_session.queried_targets:
-                active_session.queried_targets.add(target)
-                logger.info("watchdog update: target '%s' requires classification. Triggering query.", target)
-                asyncio.create_task(active_pipeline.maybe_intervene(force=True, query_target=target))
+            if query_target and query_target not in active_session.queried_targets:
+                active_session.queried_targets.add(query_target)
+                logger.info("watchdog update: target '%s' requires classification. Triggering query.", query_target)
+                asyncio.create_task(active_pipeline.maybe_intervene(force=True, query_target=query_target))
                 
         elif snapshot.is_on_task is False:
             if active_session.off_task_start is None:
@@ -211,7 +229,8 @@ async def update_activity(request: Request):
                     "target_process": snapshot.process,
                 }
             
-            asyncio.create_task(active_pipeline.maybe_intervene(force=False))
+            # Force immediate intervention for known distractions — no 2-min wait
+            asyncio.create_task(active_pipeline.maybe_intervene(force=True))
                 
         elif snapshot.is_on_task is True:
             active_session.off_task_start = None

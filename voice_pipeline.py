@@ -378,11 +378,13 @@ class StudyBuddyVoicePipeline:
         if self.session.is_on_break():
             return
             
+        # Always respect cooldown to avoid spamming the user every poll cycle
+        since_last = self.session.seconds_since_last_intervention()
+        if since_last is not None and since_last < config.INTERVENTION_COOLDOWN_SECONDS:
+            return
+
         if not force:
             if self.session.off_task_duration_seconds() < config.OFF_TASK_THRESHOLD_SECONDS:
-                return
-            since_last = self.session.seconds_since_last_intervention()
-            if since_last is not None and since_last < config.INTERVENTION_COOLDOWN_SECONDS:
                 return
 
         # Build prompt based on whether it is a query or an intervention
