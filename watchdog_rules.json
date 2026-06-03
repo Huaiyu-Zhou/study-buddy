@@ -1,6 +1,43 @@
 {
-  "study_processes": [],
-  "distraction_processes": [],
-  "study_domains": [],
-  "distraction_domains": []
+  "study_processes": [
+    "code.exe",
+    "pycharm64.exe",
+    "idea64.exe",
+    "acrobat.exe",
+    "sumatrapdf.exe",
+    "obsidian.exe",
+    "anki.exe"
+  ],
+  "distraction_processes": [
+    "steam.exe",
+    "epicgameslauncher.exe",
+    "spotify.exe"
+  ],
+  "dual_use_processes": [],
+  "study_domains": [
+    "khanacademy.org",
+    "notion.so",
+    "coursera.org",
+    "edx.org",
+    "brilliant.org",
+    "wolframalpha.com",
+    "desmos.com",
+    "scholar.google.com",
+    "wikipedia.org"
+  ],
+  "distraction_domains": [
+    "netflix.com",
+    "instagram.com",
+    "reddit.com",
+    "twitter.com",
+    "x.com",
+    "tiktok.com",
+    "facebook.com",
+    "twitch.tv",
+    "9gag.com",
+    "spotify.com"
+  ],
+  "dual_use_domains": [
+    "youtube.com"
+  ]
 }

@@ -851,6 +851,43 @@
                     <div class="empty-activity">Click a day on the calendar to view application statistics.</div>
                 </div>
             </div>
+
+            <!-- Classification Rules Card -->
+            <div class="panel">
+                <div class="panel-title">Classification Rules</div>
+                
+                <!-- Category Tabs -->
+                <div class="classification-tabs" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                    <button class="tab-btn active" onclick="switchRulesTab('study')" style="background: transparent; border: none; font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--accent-green); cursor: pointer; padding: 4px 8px; position: relative;">✅ Study</button>
+                    <button class="tab-btn" onclick="switchRulesTab('distraction')" style="background: transparent; border: none; font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); cursor: pointer; padding: 4px 8px; position: relative;">🚫 Distractions</button>
+                    <button class="tab-btn" onclick="switchRulesTab('dual_use')" style="background: transparent; border: none; font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); cursor: pointer; padding: 4px 8px; position: relative;">❓ Dual-Use</button>
+                </div>
+
+                <!-- Rules list container -->
+                <div class="rules-list-container" id="rulesList" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; padding-right: 4px;">
+                    <!-- Dynamically populated rules -->
+                </div>
+
+                <!-- Add New Rule Form -->
+                <div class="add-rule-form" style="border-top: 1px solid var(--border-color); padding-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+                    <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Add Custom Rule</div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="newRuleName" placeholder="e.g. reddit.com, discord.exe" style="flex-grow: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; outline: none; transition: var(--transition-smooth);">
+                        <select id="newRuleType" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; font-size: 0.85rem; outline: none; cursor: pointer; color: var(--text-main);">
+                            <option value="domain">Website (Domain)</option>
+                            <option value="process">App (Process)</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <select id="newRuleCategory" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; font-size: 0.85rem; outline: none; cursor: pointer; color: var(--text-main);">
+                            <option value="study">Allowed (Study)</option>
+                            <option value="distraction">Blocked (Distraction)</option>
+                            <option value="dual_use">Dual-Use (Can be both)</option>
+                        </select>
+                        <button onclick="addRule()" class="btn-webhook" style="padding: 8px 16px; font-weight: 600;">Add Rule</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -1501,12 +1538,133 @@
             await fetchHistoryAndRenderCalendar();
         });
 
+        // Rules configuration management
+        let currentRulesTab = 'study';
+        let classificationsData = { study: { processes: [], domains: [] }, distraction: { processes: [], domains: [] }, dual_use: { processes: [], domains: [] } };
+
+        async function fetchClassifications() {
+            try {
+                const res = await fetch('/classifications');
+                classificationsData = await res.json();
+                renderRulesList();
+            } catch (err) {
+                console.error("Failed to load classifications:", err);
+            }
+        }
+
+        window.switchRulesTab = function(tab) {
+            currentRulesTab = tab;
+            // Update tab button styles
+            const tabButtons = document.querySelectorAll('.classification-tabs .tab-btn');
+            tabButtons.forEach(btn => {
+                btn.style.color = 'var(--text-muted)';
+                btn.classList.remove('active');
+            });
+            
+            // Highlight current tab button based on selection
+            const activeBtn = Array.from(tabButtons).find(btn => btn.getAttribute('onclick').includes(tab));
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+                if (tab === 'study') activeBtn.style.color = 'var(--accent-green)';
+                else if (tab === 'distraction') activeBtn.style.color = 'var(--accent-crimson)';
+                else if (tab === 'dual_use') activeBtn.style.color = 'var(--accent-indigo)';
+            }
+            renderRulesList();
+        }
+
+        function renderRulesList() {
+            const container = document.getElementById('rulesList');
+            container.innerHTML = '';
+            
+            const tabData = classificationsData[currentRulesTab] || { processes: [], domains: [] };
+            const domains = tabData.domains || [];
+            const processes = tabData.processes || [];
+            
+            if (domains.length === 0 && processes.length === 0) {
+                container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 20px 0;">No rules in this category.</div>`;
+                return;
+            }
+
+            // Helper to render an item row
+            const createRuleRow = (name, isDomain) => {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.justifyContent = 'space-between';
+                row.style.alignItems = 'center';
+                row.style.padding = '8px 12px';
+                row.style.background = '#f8fafc';
+                row.style.border = '1px solid var(--border-color)';
+                row.style.borderRadius = '8px';
+                row.style.fontSize = '0.85rem';
+                
+                const labelText = isDomain ? '🌐 web' : '💻 app';
+                row.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 0.7rem; background: #e2e8f0; color: var(--text-muted); padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase;">${labelText}</span>
+                        <span style="font-weight: 500; color: var(--text-main); word-break: break-all;">${name}</span>
+                    </div>
+                    <button class="btn-webhook" onclick="deleteRule('${name}', ${isDomain})" style="padding: 4px 8px; color: var(--accent-crimson); border-color: rgba(239, 68, 68, 0.2); background: transparent; font-size: 0.75rem;">Delete</button>
+                `;
+                return row;
+            };
+
+            domains.forEach(d => container.appendChild(createRuleRow(d, true)));
+            processes.forEach(p => container.appendChild(createRuleRow(p, false)));
+        }
+
+        window.addRule = async function() {
+            const nameInput = document.getElementById('newRuleName');
+            const typeSelect = document.getElementById('newRuleType');
+            const catSelect = document.getElementById('newRuleCategory');
+            
+            const name = nameInput.value.trim().toLowerCase();
+            if (!name) return;
+            
+            const isDomain = (typeSelect.value === 'domain');
+            const status = catSelect.value;
+            
+            try {
+                const res = await fetch('/classify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, is_domain: isDomain, status })
+                });
+                if (res.ok) {
+                    nameInput.value = '';
+                    await fetchClassifications();
+                    // Switch tab to the added rule's category
+                    switchRulesTab(status);
+                }
+            } catch (err) {
+                console.error("Failed to add rule:", err);
+            }
+        }
+
+        window.deleteRule = async function(name, isDomain) {
+            try {
+                const res = await fetch('/classify/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, is_domain: isDomain })
+                });
+                if (res.ok) {
+                    await fetchClassifications();
+                }
+            } catch (err) {
+                console.error("Failed to delete rule:", err);
+            }
+        }
+
         // Initialize historical dashboard statistics on window load
         window.addEventListener('DOMContentLoaded', () => {
             fetchHistoryAndRenderCalendar();
+            fetchClassifications();
             // Dynamic webhook URL host replacement
             const currentHost = window.location.host || 'localhost:7860';
-            document.getElementById('webhookUrlExample').textContent = `http://${currentHost}/phone_activity?app=WeChat`;
+            const webhookUrlExample = document.getElementById('webhookUrlExample');
+            if (webhookUrlExample) {
+                webhookUrlExample.textContent = `http://${currentHost}/phone_activity?app=WeChat`;
+            }
         });
     </script>
 </body>

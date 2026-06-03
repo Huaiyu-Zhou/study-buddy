@@ -388,11 +388,13 @@ class StudyBuddyVoicePipeline:
             
             prompt = (
                 f"[WATCHDOG_QUERY] User has opened a new or dual-use {target_type}: {query_target}. "
-                f"You do not know if this target is being used for study or distraction. "
-                f"以高冷女S的身份立刻打断并质问用户，问他现在打开这个软件（或网站）是在学习还是在偷懒。"
-                f"警告：你必须等待他的回答，如果他说他在学习，你可以调用 classify_app 允许它（scope 可以选择 'session' 仅限本次或 'permanent' 永久允许）。"
-                f"如果他说他是在偷懒或者不学习，你可以调用 classify_app 将其设为 distraction，它会被立刻关掉！"
-                f"你的问句应该短促、充满怀疑和支配感（例如：“哦？{query_target}？这跟你的计划有什么关系吗？解释一下。”）。"
+                f"You do not know if this target is being used for study, distraction, or dual-use (can be both). "
+                f"以高冷女S的身份立刻打断并质问用户，问他现在打开这个软件（或网站）是在学习、在偷懒，还是可以兼具两者的双重用途。"
+                f"警告：你必须等待他的回答。如果他说他在学习，你可以调用 classify_app 并设置 status 为 'study' 允许它。"
+                f"如果他说他是在偷懒或者不学习，你可以调用 classify_app 并设置 status 为 'distraction' 将其设为 distraction。"
+                f"如果他说这取决于具体用途，或者是可以兼顾两者的双重用途，你可以调用 classify_app 并设置 status 为 'dual_use'。"
+                f"你也可以调用 get_classified_apps 工具来查询目前各个列表里都有哪些软件或网站。"
+                f"你的问句应该短促、充满怀疑和支配感（例如：“哦？{query_target}？这跟你的计划有什么关系吗？是学习、偷懒、还是两者都有？解释一下。”）。"
             )
         else:
             self.session.last_intervention = datetime.now()
