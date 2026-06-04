@@ -84,3 +84,11 @@ def test_is_on_break_returns_false_when_break_expired():
 def test_end_requested_defaults_to_false():
     session = Session()
     assert session.end_requested is False
+
+def test_ai_coaching_defaults_to_true():
+    session = Session()
+    assert session.ai_coaching is True
+
+def test_ai_coaching_can_be_set():
+    session = Session(ai_coaching=False)
+    assert session.ai_coaching is False

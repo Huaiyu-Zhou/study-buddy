@@ -7,7 +7,7 @@ registered handlers directly.
 
 import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from session import Session
 import tools
@@ -43,9 +43,9 @@ def _get_registered_handlers(session: Session) -> dict:
 
 # --- Schema tests ---
 
-def test_tool_schemas_is_a_list_of_eight():
+def test_tool_schemas_is_a_list_of_nine():
     assert isinstance(tools.TOOL_SCHEMAS, list)
-    assert len(tools.TOOL_SCHEMAS) == 8
+    assert len(tools.TOOL_SCHEMAS) == 9
 
 
 def test_all_schemas_have_openai_format():
@@ -62,7 +62,7 @@ def test_schema_names_are_correct():
     assert names == {
         "set_break", "change_persona", "load_wing",
         "update_plan", "get_session_summary", "end_session",
-        "classify_app", "get_classified_apps",
+        "classify_app", "delete_classification", "get_classified_apps",
     }
 
 
@@ -120,7 +120,7 @@ def test_end_session_sets_end_requested():
     assert len(result_text) > 0
 
 
-def test_register_tools_registers_all_eight():
+def test_register_tools_registers_all_nine():
     session = _session()
     mock_llm = MagicMock()
     registered = []
@@ -129,8 +129,30 @@ def test_register_tools_registers_all_eight():
     assert set(registered) == {
         "set_break", "change_persona", "load_wing",
         "update_plan", "get_session_summary", "end_session",
-        "classify_app", "get_classified_apps",
+        "classify_app", "delete_classification", "get_classified_apps",
     }
+
+def test_delete_classification_session_removes_from_session():
+    session = _session()
+    session.session_allowed_targets.add("classroom.google.com")
+    handlers = _get_registered_handlers(session)
+    params = _make_params({"name": "classroom.google.com", "is_domain": True, "scope": "session"})
+    asyncio.get_event_loop().run_until_complete(handlers["delete_classification"](params))
+    assert "classroom.google.com" not in session.session_allowed_targets
+    result_text = params.result_callback.call_args[0][0]
+    assert "removed" in result_text
+
+@patch("config.delete_dynamic_classification")
+def test_delete_classification_permanent_removes_permanently(mock_delete):
+    session = _session()
+    session.session_allowed_targets.add("classroom.google.com")
+    handlers = _get_registered_handlers(session)
+    params = _make_params({"name": "classroom.google.com", "is_domain": True, "scope": "permanent"})
+    asyncio.get_event_loop().run_until_complete(handlers["delete_classification"](params))
+    assert "classroom.google.com" not in session.session_allowed_targets
+    mock_delete.assert_called_once_with("classroom.google.com", True)
+    result_text = params.result_callback.call_args[0][0]
+    assert "deleted permanently" in result_text
 
 def test_get_classified_apps_returns_list_summary():
     session = _session()

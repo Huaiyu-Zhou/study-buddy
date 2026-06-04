@@ -80,7 +80,7 @@ async def serve_frontend():
 @app.post("/connect")
 async def connect(request: Request):
     """Create a Daily room, spawn the bot, and return connection info.
-    Accepts optional plan, persona, subject, and control_laptop from the request.
+    Accepts optional plan, persona, subject, control_laptop, and ai_coaching from the request.
     """
     global active_pipeline, active_session
 
@@ -93,6 +93,7 @@ async def connect(request: Request):
     persona = data.get("persona", "lady_s")
     subject = data.get("subject", "calculus")
     control_laptop = data.get("control_laptop", False)
+    ai_coaching = data.get("ai_coaching", True)
 
     # Clean up any existing active pipeline/session to avoid leaks
     if active_pipeline and active_pipeline.task:
@@ -102,37 +103,51 @@ async def connect(request: Request):
         except Exception:
             pass
 
-    # 1. Create a Daily room via REST API
-    async with aiohttp.ClientSession() as http_session:
-        daily_helper = DailyRESTHelper(
-            daily_api_key=config.DAILY_API_KEY,
-            daily_api_url=config.DAILY_API_URL,
-            aiohttp_session=http_session,
-        )
+    if ai_coaching:
+        # 1. Create a Daily room via REST API
+        async with aiohttp.ClientSession() as http_session:
+            daily_helper = DailyRESTHelper(
+                daily_api_key=config.DAILY_API_KEY,
+                daily_api_url=config.DAILY_API_URL,
+                aiohttp_session=http_session,
+            )
 
-        room = await daily_helper.create_room(
-            params=DailyRoomParams(
-                properties=DailyRoomProperties(
-                    exp=int(datetime.now().timestamp()) + 60 * 60 * 4,  # Room expires in 4 hours
-                    enable_chat=False,
+            room = await daily_helper.create_room(
+                params=DailyRoomParams(
+                    properties=DailyRoomProperties(
+                        exp=int(datetime.now().timestamp()) + 60 * 60 * 4,  # Room expires in 4 hours
+                        enable_chat=False,
+                    )
                 )
             )
+
+            # 2. Create tokens for the bot and the client
+            bot_token = await daily_helper.get_token(room.url, expiry_time=60 * 60 * 4)
+            client_token = await daily_helper.get_token(room.url, expiry_time=60 * 60 * 4)
+
+        # 3. Spawn the bot as an async background task
+        asyncio.create_task(_run_bot(room.url, bot_token, plan, persona, subject, control_laptop, ai_coaching))
+
+        # 4. Return the room URL and client token to the frontend
+        return JSONResponse(
+            content={
+                "room_url": room.url,
+                "token": client_token,
+                "ai_coaching": True,
+            }
         )
-
-        # 2. Create tokens for the bot and the client
-        bot_token = await daily_helper.get_token(room.url, expiry_time=60 * 60 * 4)
-        client_token = await daily_helper.get_token(room.url, expiry_time=60 * 60 * 4)
-
-    # 3. Spawn the bot as an async background task
-    asyncio.create_task(_run_bot(room.url, bot_token, plan, persona, subject, control_laptop))
-
-    # 4. Return the room URL and client token to the frontend
-    return JSONResponse(
-        content={
-            "room_url": room.url,
-            "token": client_token,
-        }
-    )
+    else:
+        # AI Coaching is disabled (closed)
+        active_session = Session(plan=plan, persona=persona, subject=subject, control_laptop=control_laptop, ai_coaching=False)
+        active_pipeline = None
+        logger.info("AI Coaching is disabled. Spawning watchdog-only session.")
+        return JSONResponse(
+            content={
+                "room_url": "",
+                "token": "",
+                "ai_coaching": False,
+            }
+        )
 
 
 
@@ -140,7 +155,7 @@ async def connect(request: Request):
 async def update_activity(request: Request):
     """Receive activity updates from the win_watchdog client."""
     global active_pipeline, active_session
-    if not active_pipeline or not active_session:
+    if not active_session:
         return {"status": "no_active_session"}
 
     data = await request.json()
@@ -212,12 +227,19 @@ async def update_activity(request: Request):
             if query_target.startswith("www."):
                 query_target = query_target[4:]
                 
-            if query_target and query_target not in active_session.queried_targets:
+            is_browser_target = query_target.lower() in {
+                "chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "firefox.exe", "safari.exe", "iexplore.exe",
+                "librewolf.exe", "floorp.exe", "arc.exe",
+                "chrome", "msedge", "brave", "opera", "firefox", "safari", "iexplore", "librewolf", "floorp", "arc"
+            }
+            if query_target and not is_browser_target and query_target not in active_session.queried_targets:
                 active_session.queried_targets.add(query_target)
                 logger.info("watchdog update: target '%s' requires classification. Triggering query.", query_target)
-                asyncio.create_task(active_pipeline.maybe_intervene(force=True, query_target=query_target))
+                if active_pipeline:
+                    asyncio.create_task(active_pipeline.maybe_intervene(force=True, query_target=query_target))
                 
         elif snapshot.is_on_task is False:
+            active_session.focus_streak_start = None
             if active_session.off_task_start is None:
                 active_session.off_task_start = datetime.now()
             
@@ -238,13 +260,15 @@ async def update_activity(request: Request):
                 }
             
             # Force immediate intervention for known distractions — no 2-min wait
-            asyncio.create_task(active_pipeline.maybe_intervene(force=True))
+            if active_pipeline:
+                asyncio.create_task(active_pipeline.maybe_intervene(force=True))
                 
         elif snapshot.is_on_task is True:
             active_session.off_task_start = None
             if active_session.focus_streak_start is None:
                 active_session.focus_streak_start = datetime.now()
-            asyncio.create_task(active_pipeline.maybe_reinforce())
+            if active_pipeline:
+                asyncio.create_task(active_pipeline.maybe_reinforce())
 
     resp_content = {
         "status": "success",
@@ -283,18 +307,39 @@ async def get_history():
 @app.get("/classifications")
 async def get_classifications():
     """Retrieve all current classifications (study, distraction, and dual_use)."""
+    study_processes = set(config.KNOWN_STUDY_PROCESSES)
+    study_domains = set(config.KNOWN_STUDY_DOMAINS)
+    distraction_processes = set(config.KNOWN_DISTRACTION_PROCESSES)
+    distraction_domains = set(config.KNOWN_DISTRACTION_DOMAINS)
+    dual_use_processes = set(config.KNOWN_DUAL_USE_PROCESSES)
+    dual_use_domains = set(config.KNOWN_DUAL_USE_DOMAINS)
+
+    if active_session:
+        for target in active_session.session_allowed_targets:
+            display_target = f"{target} (session only)"
+            if "." in target and not target.endswith(".exe"):
+                study_domains.add(display_target)
+            else:
+                study_processes.add(display_target)
+        for target in active_session.session_denied_targets:
+            display_target = f"{target} (session only)"
+            if "." in target and not target.endswith(".exe"):
+                distraction_domains.add(display_target)
+            else:
+                distraction_processes.add(display_target)
+
     return {
         "study": {
-            "processes": sorted(list(config.KNOWN_STUDY_PROCESSES)),
-            "domains": sorted(list(config.KNOWN_STUDY_DOMAINS))
+            "processes": sorted(list(study_processes)),
+            "domains": sorted(list(study_domains))
         },
         "distraction": {
-            "processes": sorted(list(config.KNOWN_DISTRACTION_PROCESSES)),
-            "domains": sorted(list(config.KNOWN_DISTRACTION_DOMAINS))
+            "processes": sorted(list(distraction_processes)),
+            "domains": sorted(list(distraction_domains))
         },
         "dual_use": {
-            "processes": sorted(list(config.KNOWN_DUAL_USE_PROCESSES)),
-            "domains": sorted(list(config.KNOWN_DUAL_USE_DOMAINS))
+            "processes": sorted(list(dual_use_processes)),
+            "domains": sorted(list(dual_use_domains))
         }
     }
 
@@ -313,7 +358,16 @@ async def classify(request: Request):
     if not name or is_domain is None or not status:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Missing required fields (name, is_domain, status)"})
         
+    if name.endswith(" (session only)"):
+        name = name[:-15]
+
     config.add_dynamic_classification(name, is_domain, status)
+    
+    if active_session:
+        name_lower = name.lower()
+        active_session.session_allowed_targets.discard(name_lower)
+        active_session.session_denied_targets.discard(name_lower)
+        
     return {"status": "success"}
 
 @app.post("/classify/delete")
@@ -330,7 +384,16 @@ async def delete_classification(request: Request):
     if not name or is_domain is None:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Missing required fields (name, is_domain)"})
         
+    if name.endswith(" (session only)"):
+        name = name[:-15]
+
     config.delete_dynamic_classification(name, is_domain)
+    
+    if active_session:
+        name_lower = name.lower()
+        active_session.session_allowed_targets.discard(name_lower)
+        active_session.session_denied_targets.discard(name_lower)
+        
     return {"status": "success"}
 
 @app.post("/stop")
@@ -354,10 +417,10 @@ async def congratulate():
 
 
 
-async def _run_bot(room_url: str, token: str, plan: str, persona: str, subject: str, control_laptop: bool):
+async def _run_bot(room_url: str, token: str, plan: str, persona: str, subject: str, control_laptop: bool, ai_coaching: bool):
     """Run the Study Buddy pipeline as a bot inside a Daily room."""
     global active_pipeline, active_session
-    active_session = Session(plan=plan, persona=persona, subject=subject, control_laptop=control_laptop)
+    active_session = Session(plan=plan, persona=persona, subject=subject, control_laptop=control_laptop, ai_coaching=ai_coaching)
     active_pipeline = StudyBuddyVoicePipeline(active_session, room_url=room_url, token=token)
 
     try:

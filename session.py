@@ -29,6 +29,7 @@ class Session:
     break_end: Optional[datetime] = None
     end_requested: bool = False
     control_laptop: bool = False
+    ai_coaching: bool = True
     session_allowed_targets: set[str] = field(default_factory=set)
     session_denied_targets: set[str] = field(default_factory=set)
     queried_targets: set[str] = field(default_factory=set)
