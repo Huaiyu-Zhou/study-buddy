@@ -133,6 +133,22 @@ TOOL_SCHEMAS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "delete_classification",
+            "description": "Delete a process or web domain classification from all study, distraction, or dual-use lists, resetting it to unclassified.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The process name (e.g. 'steam.exe') or domain name (e.g. 'reddit.com')."},
+                    "is_domain": {"type": "boolean", "description": "True if target is a website domain, False if it is a desktop process."},
+                    "scope": {"type": "string", "enum": ["session", "permanent"], "description": "Whether to delete the classification only for this session, or permanently."}
+                },
+                "required": ["name", "is_domain", "scope"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_classified_apps",
             "description": "Get lists of all current app and website classifications (study, distraction, and dual-use/can be both).",
             "parameters": {
@@ -254,6 +270,27 @@ def register_tools(llm, session: Session) -> None:
                 
         await params.result_callback(msg)
 
+    async def _on_delete_classification(params: FunctionCallParams):
+        name = params.arguments["name"]
+        is_domain = params.arguments["is_domain"]
+        scope = params.arguments["scope"]
+        
+        name_lower = name.lower()
+        
+        if scope == "session":
+            session.session_allowed_targets.discard(name_lower)
+            session.session_denied_targets.discard(name_lower)
+            msg = f"Target {name} classification removed for the current session."
+        else:
+            session.session_allowed_targets.discard(name_lower)
+            session.session_denied_targets.discard(name_lower)
+            import config
+            config.delete_dynamic_classification(name, is_domain)
+            msg = f"Target {name} classification deleted permanently."
+            
+        logger.info(msg)
+        await params.result_callback(msg)
+
     async def _on_get_classified_apps(params: FunctionCallParams):
         import config
         summary = (
@@ -272,4 +309,5 @@ def register_tools(llm, session: Session) -> None:
     llm.register_function("get_session_summary", _on_get_session_summary)
     llm.register_function("end_session", _on_end_session)
     llm.register_function("classify_app", _on_classify_app)
+    llm.register_function("delete_classification", _on_delete_classification)
     llm.register_function("get_classified_apps", _on_get_classified_apps)

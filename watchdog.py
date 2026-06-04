@@ -241,7 +241,12 @@ async def watchdog_loop(
                 if target.startswith("www."):
                     target = target[4:]
                 
-                if target and target not in session.queried_targets:
+                is_browser_target = target.lower() in {
+                    "chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "firefox.exe", "safari.exe", "iexplore.exe",
+                    "librewolf.exe", "floorp.exe", "arc.exe",
+                    "chrome", "msedge", "brave", "opera", "firefox", "safari", "iexplore", "librewolf", "floorp", "arc"
+                }
+                if target and not is_browser_target and target not in session.queried_targets:
                     session.queried_targets.add(target)
                     logger.info("watchdog: target '%s' requires classification. Triggering query.", target)
                     try:
@@ -250,6 +255,7 @@ async def watchdog_loop(
                         await on_off_task(snapshot, session)
             
             elif snapshot.is_on_task is False:
+                session.focus_streak_start = None
                 if session.off_task_start is None:
                     session.off_task_start = datetime.now()
                 

@@ -1181,6 +1181,14 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+
+                <div class="laptop-control-container" style="margin-top: 12px; padding-top: 0; border-top: none;">
+                    <span class="laptop-control-label">AI Coaching (Voice Assistant)</span>
+                    <label class="switch">
+                        <input type="checkbox" id="aiCoachingToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -1285,6 +1293,7 @@
         
         const planInput = document.getElementById('planInput');
         const controlLaptopToggle = document.getElementById('controlLaptopToggle');
+        const aiCoachingToggle = document.getElementById('aiCoachingToggle');
         
 
 
@@ -1808,6 +1817,7 @@
                         timerStatus.textContent = "FOCUSING";
                         timerStatus.style.color = "var(--accent-green)";
                     }
+                    await fetchClassifications();
                 }
             } catch (err) {
                 console.error("Error fetching stats:", err);
@@ -1854,6 +1864,7 @@
                 
                 planInput.disabled = true;
                 controlLaptopToggle.disabled = true;
+                aiCoachingToggle.disabled = true;
                 durationMinutesInput.disabled = true;
 
                 // 1. POST session details to backend
@@ -1862,44 +1873,58 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         plan: planInput.value || "Focus Session",
-                        control_laptop: controlLaptopToggle.checked
+                        control_laptop: controlLaptopToggle.checked,
+                        ai_coaching: aiCoachingToggle.checked
                     })
                 });
 
                 if (!response.ok) throw new Error("Failed to start session on the server.");
 
-                const { room_url, token } = await response.json();
+                const connData = await response.json();
+                const { room_url, token, ai_coaching } = connData;
 
-                // 2. Initialize Daily Call object
-                callFrame = window.DailyIframe.createCallObject();
+                if (ai_coaching && room_url && token) {
+                    // 2. Initialize Daily Call object
+                    callFrame = window.DailyIframe.createCallObject();
 
-                // Track headless audio stream elements
-                callFrame.on('track-started', (evt) => {
-                    if (evt.track.kind === 'audio' && !evt.participant.local) {
-                        const trackId = evt.track.id;
-                        if (!remoteAudioElements[trackId]) {
-                            const audioEl = document.createElement('audio');
-                            audioEl.style.display = 'none';
-                            audioEl.autoplay = true;
-                            audioEl.srcObject = new MediaStream([evt.track]);
-                            document.body.appendChild(audioEl);
-                            remoteAudioElements[trackId] = audioEl;
+                    // Track headless audio stream elements
+                    callFrame.on('track-started', (evt) => {
+                        if (evt.track.kind === 'audio' && !evt.participant.local) {
+                            const trackId = evt.track.id;
+                            if (!remoteAudioElements[trackId]) {
+                                const audioEl = document.createElement('audio');
+                                audioEl.style.display = 'none';
+                                audioEl.autoplay = true;
+                                audioEl.srcObject = new MediaStream([evt.track]);
+                                document.body.appendChild(audioEl);
+                                remoteAudioElements[trackId] = audioEl;
+                                
+                                // Explicitly play and handle potential browser autoplay blocks
+                                audioEl.play().catch(e => {
+                                    console.warn("Autoplay blocked, attempting to play on next user interaction:", e);
+                                    const resumeAudio = () => {
+                                        audioEl.play().catch(err => console.error("Still failed to play audio:", err));
+                                        document.removeEventListener('click', resumeAudio);
+                                    };
+                                    document.addEventListener('click', resumeAudio);
+                                });
+                            }
                         }
-                    }
-                });
+                    });
 
-                callFrame.on('track-stopped', (evt) => {
-                    const trackId = evt.track.id;
-                    if (remoteAudioElements[trackId]) {
-                        const audioEl = remoteAudioElements[trackId];
-                        audioEl.pause();
-                        audioEl.remove();
-                        delete remoteAudioElements[trackId];
-                    }
-                });
-                
-                // Connect call
-                await callFrame.join({ url: room_url, token: token });
+                    callFrame.on('track-stopped', (evt) => {
+                        const trackId = evt.track.id;
+                        if (remoteAudioElements[trackId]) {
+                            const audioEl = remoteAudioElements[trackId];
+                            audioEl.pause();
+                            audioEl.remove();
+                            delete remoteAudioElements[trackId];
+                        }
+                    });
+                    
+                    // Connect call
+                    await callFrame.join({ url: room_url, token: token });
+                }
 
                 // UI display adjustments
                 startBtn.style.display = 'none';
@@ -1930,18 +1955,20 @@
                 statsInterval = setInterval(updateStats, 2000);
 
                 // Speaker tracking events
-                callFrame.on('active-speaker-change', (evt) => {
-                    const peerId = evt.activeSpeaker.peerId;
-                    const localParticipant = callFrame.participants().local;
-                    if (peerId !== localParticipant.session_id) {
-                        // Coach is talking
-                        timerStatus.textContent = "COACH TALKING";
-                        timerStatus.style.color = "var(--accent-indigo)";
-                    } else {
-                        timerStatus.textContent = "USER SPEAKING";
-                        timerStatus.style.color = "var(--accent-blue)";
-                    }
-                });
+                if (callFrame) {
+                    callFrame.on('active-speaker-change', (evt) => {
+                        const peerId = evt.activeSpeaker.peerId;
+                        const localParticipant = callFrame.participants().local;
+                        if (peerId !== localParticipant.session_id) {
+                            // Coach is talking
+                            timerStatus.textContent = "COACH TALKING";
+                            timerStatus.style.color = "var(--accent-indigo)";
+                        } else {
+                            timerStatus.textContent = "USER SPEAKING";
+                            timerStatus.style.color = "var(--accent-blue)";
+                        }
+                    });
+                }
 
             } catch (err) {
                 console.error("Failed to start study session:", err);
@@ -1951,6 +1978,7 @@
                 timerWrapper.classList.remove('active');
                 planInput.disabled = false;
                 controlLaptopToggle.disabled = false;
+                aiCoachingToggle.disabled = false;
                 durationMinutesInput.disabled = false;
                 startBtn.disabled = false;
                 startBtn.textContent = 'Start Study';
@@ -1991,6 +2019,7 @@
             // Re-enable configuration controls
             planInput.disabled = false;
             controlLaptopToggle.disabled = false;
+            aiCoachingToggle.disabled = false;
             durationMinutesInput.disabled = false;
 
             // Toggle visibility
@@ -2128,6 +2157,8 @@
         window.addEventListener('DOMContentLoaded', () => {
             fetchHistoryAndRenderCalendar();
             fetchClassifications();
+            // Automatically refresh history/activity details every 5 seconds
+            setInterval(fetchHistoryAndRenderCalendar, 5000);
         });
     </script>
 </body>

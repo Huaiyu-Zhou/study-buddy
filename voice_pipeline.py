@@ -192,13 +192,16 @@ class StudyBuddyVoicePipeline:
             "Be motivating but gentle. If the user drifts, do not be angry or harsh; instead, gently remind them of their goal and encourage them to return to it.",
             "Allowed: Warm encouragement, friendly banter, positive reinforcement, celebrating focus wins, and gentle nudges.",
             "Do NOT: Be harsh, sarcastic, dominant, or mean. Do not give long monologues—keep your responses brief and concise.",
+            "Do NOT ask too many questions. Limit the use of questions so you do not constantly query the user; talk less and focus on brief statements or encouragement.",
             "Conversation examples:",
             "- 'I noticed you switched windows. Let's stay focused on our goal, you've got this!'",
             "- 'Awesome job staying focused! Let's keep this momentum going.'",
             "- 'Hey, no worries. Let's put the distraction aside and get back to learning.'",
-            "- 'Great, that part of the plan is looking good. What's next on our list?'",
+            "- 'Nice work on that part of the plan.'",
             f"Current study plan: {self.session.plan}",
-            "Response length: 1 to 3 sentences. Maintain a strong, warm, and friendly coaching presence.",
+            "You can classify apps/domains as study, distraction, or dual-use using the `classify_app` tool. If the user requests to classify or change the category of an app/domain (either for this session or permanently), call `classify_app`.",
+            "If the user requests to delete, remove, or reset a classification of an app/domain from the lists, you MUST call the `delete_classification` tool.",
+            "Response length: keep it extremely brief (preferably 1 short sentence, maximum 2). Talk less. Do not ask questions unless necessary. Maintain a strong, warm, and friendly coaching presence.",
         ]
 
         # Load MemPalace context if a subject is set
@@ -406,7 +409,7 @@ class StudyBuddyVoicePipeline:
                 f"Simply agreeing verbally is not enough; you must execute the `classify_app` function call to update the system status.\n"
                 f"If they say they are studying, call `classify_app` with status set to 'study'. If they say they are not studying, call `classify_app` with status set to 'distraction'. If they say it depends or can be both (dual-use), call `classify_app` with status set to 'dual_use'.\n"
                 f"You can also use the `get_classified_apps` tool if you need to check which apps/websites are currently in each category.\n"
-                f"Your query should be warm, curious, and helpful (e.g. 'Oh, I see you opened {query_target}. Is that part of your study plan today? Or is it a distraction, or maybe something you use for both? Let me know so I can configure it for you!')."
+                f"Your query should be extremely brief (e.g. 'I noticed you opened {query_target}. Is it for study or a distraction?')."
             )
         else:
             self.session.last_intervention = datetime.now()
@@ -423,13 +426,13 @@ class StudyBuddyVoicePipeline:
                 prompt = (
                     f"System notification: The user opened a distraction app/website: {last_snap.process if last_snap else 'unknown'}{detail}.\n"
                     f"Because Laptop Control is active, the system has automatically closed it for them.\n"
-                    f"Please friendly and gently remind them that you closed it to keep them on track, and encourage them to get back to their study plan."
+                    f"Please friendly and gently remind them that you closed it to keep them on track, and encourage them to get back to their study plan. Keep it to a single short sentence, and do not ask any questions."
                 )
             else:
                 prompt = (
                     f"System notification: The user has been distracted for {self.session.off_task_duration_seconds()} seconds"
                     f"{detail}. Current study plan: {self.session.plan}.\n"
-                    f"Please gently check in on them, offer supportive encouragement, and kindly nudge them back to studying."
+                    f"Please gently check in on them, offer supportive encouragement, and kindly nudge them back to studying. Keep your response to a single short sentence, and do not ask any questions."
                 )
 
         # Inject the intervention/query message and trigger LLM
@@ -449,7 +452,7 @@ class StudyBuddyVoicePipeline:
         streak_min = self.session.focus_streak_seconds() // 60
         prompt = (
             f"System notification: The user has been focused on studying for {streak_min} minutes without any distractions.\n"
-            f"Please praise them warmly, celebrate their progress, and encourage them to keep up the great work! Keep it to one or two sentences."
+            f"Please praise them warmly, celebrate their progress, and encourage them to keep up the great work! Keep it to one short sentence, and do not ask any questions."
         )
 
         self.session.last_intervention = datetime.now()
@@ -465,7 +468,7 @@ class StudyBuddyVoicePipeline:
             
         prompt = (
             f"System notification: The user has successfully completed their study session for their goal: '{self.session.plan}'!\n"
-            "Please praise them enthusiastically, congratulate them warmly on their focus and achievement, and wrap up the session with positive energy. Keep it to two or three sentences."
+            "Please praise them enthusiastically, congratulate them warmly on their focus and achievement, and wrap up the session with positive energy. Keep it to one or two short sentences."
         )
         
         self.context.add_message({"role": "system", "content": prompt})
