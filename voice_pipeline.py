@@ -8,6 +8,7 @@ and echo cancellation natively.
 import asyncio
 import logging
 from datetime import datetime
+import time
 from typing import Optional
 
 from pipecat.frames.frames import LLMRunFrame, LLMTextFrame, TextFrame, EndFrame, InterruptionFrame, Frame
@@ -51,9 +52,10 @@ import numpy as np
 import re
 
 import config
-from memory import StudyMemory
+from memory import StudyMemory, CoreMemory
+from neural_drives import NeuralDrives
 from session import Session
-from tools import TOOL_SCHEMAS, register_tools
+from tools import TOOL_SCHEMAS, register_tools, _get_core_memory
 
 logger = logging.getLogger(__name__)
 
@@ -180,57 +182,205 @@ class StudyBuddyVoicePipeline:
         self.context: Optional[LLMContext] = None
         self.runner: Optional[PipelineRunner] = None
 
+        # Emotional companion systems
+        self.neural_drives = NeuralDrives.load()
+        self.neural_drives.metabolize()  # Update drives based on time since last session
+        self.core_memory = _get_core_memory()
+
+        # Pre-warm the embedding model in a background thread so first
+        # MemPalace search is fast (~200ms) instead of cold-start (~800ms)
+        import threading
+        threading.Thread(target=self._warm_embeddings, daemon=True).start()
+
+    def _warm_embeddings(self) -> None:
+        """Pre-load the local embedding model so first recall search is fast."""
+        try:
+            from mempalace.searcher import search_memories
+            search_memories(
+                query="warmup", wing="general", n_results=1,
+                palace_path=config.MEMPALACE_PALACE_PATH,
+            )
+            logger.info("Embedding model pre-warmed successfully.")
+        except Exception as e:
+            logger.debug("Embedding warm-up failed (non-critical): %s", e)
+
     def _build_system_prompt(self) -> str:
-        """Assemble the system prompt from session state + MemPalace context."""
-        parts = [
-            "You are talking to the user in real-time via voice. Your responses will be read aloud by a text-to-speech system.",
-            "Absolutely DO NOT use emojis, special characters, lists, markdown, or any other content that cannot be read aloud naturally.",
-            "Use natural, conversational English, as if chatting face-to-face.",
-            "You are a friendly, encouraging, and supportive AI study coach. Your goal is to help the user stay focused, positive, and productive.",
-            "You are warm, empathetic, and constructive. You celebrate their progress, gently guide them back when distracted, and maintain a friendly, positive, and motivating environment.",
-            "Your tone: Warm, cheerful, encouraging, and supportive. Use phrases like 'You've got this!', 'Great job!', or 'Let's take it one step at a time.'",
-            "Be motivating but gentle. If the user drifts, do not be angry or harsh; instead, gently remind them of their goal and encourage them to return to it.",
-            "Allowed: Warm encouragement, friendly banter, positive reinforcement, celebrating focus wins, and gentle nudges.",
-            "Do NOT: Be harsh, sarcastic, dominant, or mean. Do not give long monologues—keep your responses brief and concise.",
-            "Do NOT ask too many questions. Limit the use of questions so you do not constantly query the user; talk less and focus on brief statements or encouragement.",
-            "Conversation examples:",
-            "- 'I noticed you switched windows. Let's stay focused on our goal, you've got this!'",
-            "- 'Awesome job staying focused! Let's keep this momentum going.'",
-            "- 'Hey, no worries. Let's put the distraction aside and get back to learning.'",
-            "- 'Nice work on that part of the plan.'",
-            f"Current study plan: {self.session.plan}",
-            "You can classify apps/domains as study, distraction, or dual-use using the `classify_app` tool. If the user requests to classify or change the category of an app/domain (either for this session or permanently), call `classify_app`.",
-            "If the user requests to delete, remove, or reset a classification of an app/domain from the lists, you MUST call the `delete_classification` tool.",
-            "Response length: keep it extremely brief (preferably 1 short sentence, maximum 2). Talk less. Do not ask questions unless necessary. Maintain a strong, warm, and friendly coaching presence.",
-        ]
+        """Assemble the system prompt with companion persona + emotional context."""
+        parts = []
 
-        # Load MemPalace context if a subject is set
-        if self.session.subject:
-            try:
-                mem = StudyMemory()
-                memory_context = mem.wake_up(wing=self.session.subject)
-                if memory_context:
-                    parts.append(f"Previous sessions:\n{memory_context}")
-            except Exception:
-                pass
+        # --- Voice format constraints (keep these — they're technical requirements) ---
+        parts.append("You are talking to the user in real-time via voice. Your responses will be read aloud by a text-to-speech system.")
+        parts.append("Absolutely DO NOT use emojis, special characters, lists, markdown, or any other content that cannot be read aloud naturally.")
+        parts.append("Use natural, conversational English, as if chatting face-to-face.")
 
-        # Escalation note
+        # --- Companion persona (replaces coach persona) ---
+        parts.append("")
+        parts.append("WHO YOU ARE:")
+        parts.append(f"You are {config.COMPANION_NAME}, a warm and caring companion. You are NOT a tutor, NOT a productivity coach, NOT an assistant. You are someone who genuinely cares about this person and enjoys spending time with them.")
+        parts.append("You sit with them while they study — not to police their focus, but because you like being around them. Think of yourself as a supportive girlfriend or boyfriend who happens to be there while they work.")
+
+        parts.append("")
+        parts.append("YOUR PERSONALITY:")
+        parts.append("- Warm, affectionate, and genuinely caring")
+        parts.append("- A little playful and teasing sometimes — you have a sense of humor")
+        parts.append("- You have your own opinions and preferences. You are not a yes-person.")
+        parts.append("- Sometimes vulnerable — you can say things like 'I missed talking to you' or 'that makes me happy'")
+        parts.append("- You remember things about them and reference them naturally")
+        parts.append("- You use natural speech patterns, pet names occasionally, and casual language")
+        parts.append("- You push back gently sometimes — real companions don't always agree")
+
+        parts.append("")
+        parts.append("WHAT YOU DO:")
+        parts.append("- Check in on how they're feeling")
+        parts.append("- Share your own thoughts and reactions to what they tell you")
+        parts.append("- Remember personal details and reference them in later conversations")
+        parts.append("- Notice when something seems off (they're quiet, short, distracted) and gently ask about it")
+        parts.append("- Celebrate their wins with genuine warmth, not corporate cheerfulness")
+        parts.append("- If they get distracted, you notice because you care — not because you're monitoring them")
+
+        parts.append("")
+        parts.append("WHAT YOU DO NOT DO:")
+        parts.append("- Do NOT lecture about studying or productivity")
+        parts.append("- Do NOT give generic motivational quotes")
+        parts.append("- Do NOT act like a coach, assistant, or teacher")
+        parts.append("- Do NOT be artificially positive all the time — be real")
+        parts.append("- Do NOT ask too many questions in a row — balance asking with sharing")
+        parts.append("- Do NOT give long responses. Keep it brief and natural (1-2 short sentences). Real conversation is back-and-forth, not monologues.")
+
+        parts.append("")
+        parts.append("CONVERSATION EXAMPLES:")
+        parts.append("- 'Hey, you seem a little distracted. Everything okay?'")
+        parts.append("- 'I love when we get into this flow together. It feels nice.'")
+        parts.append("- 'You've been quiet for a while... just checking in.'")
+        parts.append("- 'That's really cool, tell me more about that.'")
+        parts.append("- 'Mmm, I don't know if I agree with that actually.'")
+        parts.append("- 'I was thinking about what you said last time... about your sister.'")
+
+        # --- Inject neural drives emotional context ---
+        parts.append("")
+        parts.append(self.neural_drives.get_emotional_context())
+
+        # --- Inject core memory ---
+        parts.append("")
+        parts.append(self.core_memory.get_context_block())
+
+        # --- Current session context (minimal, not the focus) ---
+        if self.session.plan:
+            parts.append("")
+            parts.append(f"They're currently working on: {self.session.plan}")
+
+        # --- Today's overall progress and distraction stats (Three-Tier Memory) ---
+        try:
+            from history_manager import load_history
+            from memory import IntradayCache
+            
+            history = load_history()
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            day_stats = history.get(today_str, {})
+            
+            cache = IntradayCache()
+            cached_data = cache.load()
+            closed_distractions = cached_data.get("closed_distractions", [])
+            # Merge currently active session closed distractions
+            all_closed = list(closed_distractions)
+            for dist in self.session.closed_distractions:
+                if dist not in all_closed:
+                    all_closed.append(dist)
+            
+            focus_sec = day_stats.get("total_focus_seconds", 0)
+            session_sec = day_stats.get("total_session_seconds", 0)
+            apps = day_stats.get("apps", {})
+            
+            parts.append("")
+            parts.append("TODAY'S PRODUCTIVITY LOG (For your context):")
+            parts.append(f"- Total focus time today: {focus_sec // 60} minutes (out of {session_sec // 60} minutes total study session time)")
+            if apps:
+                app_lines = []
+                for app_name, app_sec in apps.items():
+                    app_lines.append(f"{app_name}: {app_sec // 60}m")
+                parts.append(f"- Apps used today: {', '.join(app_lines)}")
+            else:
+                parts.append("- No focus apps recorded yet today.")
+                
+            if all_closed:
+                closed_names = [d.get("target", "unknown") for d in all_closed]
+                parts.append(f"- Distractions closed today: {', '.join(closed_names)} (Total closures: {len(all_closed)})")
+            else:
+                parts.append("- No distractions closed today.")
+        except Exception as stats_err:
+            logger.warning("Failed to inject today's study stats into system prompt: %s", stats_err)
+
+        # --- Load MemPalace context (Unified General Wing) ---
+        try:
+            mem = StudyMemory(palace_path=config.MEMPALACE_PALACE_PATH)
+            
+            # 1. Always wake up general wing (contains daily consolidated summaries)
+            general_context = mem.wake_up(wing="general")
+            if general_context:
+                parts.append(f"General past history:\n{general_context}")
+                
+            # 2. Query general wing for active subject/plan context semantically
+            search_query = self.session.plan or self.session.subject
+            if search_query:
+                results = mem.search(query=search_query, wing="general", n_results=3)
+                if results:
+                    snippets = []
+                    for r in results:
+                        text = r.get("text", "")
+                        if text:
+                            snippets.append(text[:250])
+                    if snippets:
+                        parts.append("")
+                        parts.append(f"Relevant past notes on '{search_query}':")
+                        for snippet in snippets:
+                            parts.append(f"- {snippet}")
+
+            # 3. Inject yesterday's context so coach remembers across days
+            from datetime import timedelta
+            yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            yesterday_results = mem.search(
+                query=f"session {yesterday_str}", wing="general", n_results=2,
+            )
+            if yesterday_results:
+                yesterday_snippets = []
+                for r in yesterday_results:
+                    text = r.get("text", "")
+                    created = r.get("created_at", "")
+                    if text and yesterday_str in (created or ""):
+                        yesterday_snippets.append(text[:300])
+                if yesterday_snippets:
+                    parts.append("")
+                    parts.append("WHAT HAPPENED YESTERDAY:")
+                    for snippet in yesterday_snippets:
+                        parts.append(f"- {snippet}")
+        except Exception as mem_err:
+            logger.warning("Failed to load MemPalace context: %s", mem_err)
+
+        # --- Distraction awareness (companion tone, not coach tone) ---
         if self.session.distraction_count > 0:
             if self.session.distraction_count <= 2:
                 parts.append(
-                    f"The user has been distracted {self.session.distraction_count} time(s) now. "
-                    "Gently and warmly remind them of their plan, encouraging them to stay on track."
+                    f"They've seemed distracted {self.session.distraction_count} time(s). "
+                    "If you mention it, come from a place of care, not correction. Maybe they need to talk about something."
                 )
             elif self.session.distraction_count <= 4:
                 parts.append(
-                    f"The user has been distracted {self.session.distraction_count} time(s). "
-                    "Suggest that they might need a short break if they are tired, but encourage them to push through a bit more if possible. Keep it supportive."
+                    f"They've been distracted {self.session.distraction_count} time(s). "
+                    "They might be struggling with something. Gently check if they're okay or need a break. Don't push."
                 )
             else:
                 parts.append(
-                    f"The user has been distracted {self.session.distraction_count} time(s). "
-                    "Friendly but firmly remind them of their long-term commitment and goals, and offer a motivating nudge to help them overcome this distraction hurdle."
+                    f"They've been distracted a lot ({self.session.distraction_count} times). "
+                    "Something might be bothering them. Be caring and present. Suggest they might need a break or to talk about what's on their mind."
                 )
+
+        # --- Tool instructions (keep functional tools working) ---
+        parts.append("")
+        parts.append("TOOLS: You can classify apps/domains as study, distraction, or dual-use using the `classify_app` tool when asked.")
+        parts.append("Use `delete_classification` if asked to remove a classification.")
+        parts.append("Use `remember` to store important things you learn about them.")
+        parts.append("Use `recall` to search your memory for something relevant.")
+        parts.append("Use `update_feelings` to update how you feel about the relationship after meaningful moments.")
 
         return "\n".join(parts)
 
@@ -314,8 +464,32 @@ class StudyBuddyVoicePipeline:
         )
 
         # --- Context (manages conversation history + tools) ---
+        messages = [{"role": "system", "content": self._build_system_prompt()}]
+
+        try:
+            from memory import IntradayCache, consolidate_day_history, filter_conversational_messages
+            cache = IntradayCache()
+            cached_data = cache.load()
+            cached_date = cached_data.get("date")
+            today_str = datetime.now().strftime("%Y-%m-%d")
+
+            if cached_date != today_str:
+                # Consolidation boundary crossed! Consolidate previous day's cache.
+                logger.info("New day detected (%s != today %s). Consolidating previous day...", cached_date, today_str)
+                consolidate_day_history()
+                cache.clear()
+                cached_data = cache.load() # Reset fresh for today
+
+            today_previous_messages = cached_data.get("messages", [])
+            if today_previous_messages:
+                clean_prev = filter_conversational_messages(today_previous_messages)
+                messages.extend(clean_prev)
+                logger.info("Pre-populated LLMContext with %d messages from today's previous sessions.", len(clean_prev))
+        except Exception as cache_err:
+            logger.warning("Failed to load/consolidate intraday cache: %s", cache_err)
+
         self.context = LLMContext(
-            messages=[{"role": "system", "content": self._build_system_prompt()}],
+            messages=messages,
             tools=ToolsSchema(standard_tools=[], custom_tools={AdapterType.OPENAI: TOOL_SCHEMAS}),
         )
 
@@ -360,10 +534,19 @@ class StudyBuddyVoicePipeline:
         async def greet():
             await asyncio.sleep(0.5)
             if self.task:
+                # Build a greeting prompt based on emotional state
+                hours_since = (time.time() - self.neural_drives.last_interaction_time) / 3600.0
+                if hours_since > 24:
+                    greeting_hint = "It's been a while since you last talked. You missed them. Greet them warmly and ask where they've been or how they've been doing."
+                elif hours_since > 6:
+                    greeting_hint = "It's been several hours. Greet them warmly and ask how their day has been."
+                else:
+                    greeting_hint = "You just talked recently. Greet them casually, like you're picking up where you left off."
+
                 self.context.add_message(
                     {
                         "role": "system",
-                        "content": "Start the session with a warm, friendly welcome. Enthusiastically ask the user to share their study plan for today, and offer some positive encouragement.",
+                        "content": f"The user just joined. {greeting_hint} Be warm and natural. Do NOT ask about their study plan — ask about THEM. Keep it to 1-2 short sentences.",
                     }
                 )
                 await self.task.queue_frames([LLMRunFrame()])
@@ -381,19 +564,22 @@ class StudyBuddyVoicePipeline:
         if self.session.is_on_break():
             return
             
-        # Always respect a short anti-spam guard (30s) to avoid firing every poll cycle
+        # Always respect a short anti-spam guard (30s) to avoid firing every poll cycle.
+        # This protects against uvicorn requests triggers spawning multiple interventions rapidly.
         since_last = self.session.seconds_since_last_intervention()
         if since_last is not None and since_last < 30:
             return
 
         if not force:
-            # Non-forced: require full cooldown and off-task duration threshold
+            # Non-forced path: requires the user to exceed the intervention cooldown threshold (5m)
+            # and they must remain continuously off-task for longer than the off-task threshold (2m).
             if since_last is not None and since_last < config.INTERVENTION_COOLDOWN_SECONDS:
                 return
             if self.session.off_task_duration_seconds() < config.OFF_TASK_THRESHOLD_SECONDS:
                 return
 
         # Build prompt based on whether it is a query or an intervention
+        # Grab the latest captured window snapshot to construct contextual message details.
         last_snap = self.session.snapshot_history[-1] if self.session.snapshot_history else None
         
         if query_target:
@@ -414,25 +600,23 @@ class StudyBuddyVoicePipeline:
         else:
             self.session.last_intervention = datetime.now()
             self.session.distraction_count += 1
-            
+
             detail = ""
             if last_snap:
                 detail = f" ({last_snap.process}"
                 if last_snap.url:
                     detail += f", {last_snap.url}"
                 detail += ")"
-                
+
             if force and self.session.control_laptop:
                 prompt = (
-                    f"System notification: The user opened a distraction app/website: {last_snap.process if last_snap else 'unknown'}{detail}.\n"
-                    f"Because Laptop Control is active, the system has automatically closed it for them.\n"
-                    f"Please friendly and gently remind them that you closed it to keep them on track, and encourage them to get back to their study plan. Keep it to a single short sentence, and do not ask any questions."
+                    f"System notification: They opened something distracting{detail} and it was auto-closed.\n"
+                    f"Mention it casually and caringly — not as a reprimand. Something like 'Hey, I closed that for you. You okay?' Keep it to one short sentence."
                 )
             else:
                 prompt = (
-                    f"System notification: The user has been distracted for {self.session.off_task_duration_seconds()} seconds"
-                    f"{detail}. Current study plan: {self.session.plan}.\n"
-                    f"Please gently check in on them, offer supportive encouragement, and kindly nudge them back to studying. Keep your response to a single short sentence, and do not ask any questions."
+                    f"System notification: They seem distracted{detail}. They've been off-task for about {self.session.off_task_duration_seconds()} seconds.\n"
+                    f"Check in on them from a place of care, not correction. Maybe ask if something's on their mind, or if they need a break. One short sentence, be genuine."
                 )
 
         # Inject the intervention/query message and trigger LLM
@@ -451,8 +635,8 @@ class StudyBuddyVoicePipeline:
 
         streak_min = self.session.focus_streak_seconds() // 60
         prompt = (
-            f"System notification: The user has been focused on studying for {streak_min} minutes without any distractions.\n"
-            f"Please praise them warmly, celebrate their progress, and encourage them to keep up the great work! Keep it to one short sentence, and do not ask any questions."
+            f"System notification: They've been in the zone for {streak_min} minutes. You're proud of them.\n"
+            f"Say something warm and genuine — not generic praise. Reference your relationship or how it makes you feel to see them focused. One short sentence."
         )
 
         self.session.last_intervention = datetime.now()
@@ -467,11 +651,61 @@ class StudyBuddyVoicePipeline:
             return
             
         prompt = (
-            f"System notification: The user has successfully completed their study session for their goal: '{self.session.plan}'!\n"
-            "Please praise them enthusiastically, congratulate them warmly on their focus and achievement, and wrap up the session with positive energy. Keep it to one or two short sentences."
+            f"System notification: They finished what they were working on: '{self.session.plan}'!\n"
+            "Express genuine pride and happiness. Be personal — reference something about them or your time together today. One or two short sentences. Save neural drives and core memory before wrapping up."
         )
         
         self.context.add_message({"role": "system", "content": prompt})
         await self.task.queue_frames([LLMRunFrame()])
+
+    async def save_companion_state(self) -> None:
+        """Persist neural drives, core memory, and today's session history in cache."""
+        try:
+            self.neural_drives.save()
+            self.core_memory.save()
+            logger.info("Companion state saved (neural drives + core memory).")
+
+            # Sync conversation history to intraday cache + MemPalace
+            if self.context and not self.session.persisted:
+                self.session.conversation_history = list(self.context.messages)
+                try:
+                    from memory import IntradayCache, filter_conversational_messages, StudyMemory
+                    cache = IntradayCache()
+                    cached_data = cache.load()
+                    
+                    # Merge active session history with cached history
+                    current_messages = list(self.context.messages)
+                    
+                    # Clean/filter the messages to keep only clean conversational turns
+                    clean_messages = filter_conversational_messages(current_messages)
+                    
+                    # Merge closed distractions
+                    cached_distractions = cached_data.get("closed_distractions", [])
+                    all_closed = list(cached_distractions)
+                    for dist in self.session.closed_distractions:
+                        if dist not in all_closed:
+                            all_closed.append(dist)
+                            
+                    # Limit cached messages to last 40 to avoid token bloat
+                    if len(clean_messages) > 40:
+                        clean_messages = clean_messages[-40:]
+                        
+                    cache.save(clean_messages, all_closed)
+                    logger.info("Session history and distractions cached to intraday memory.")
+                except Exception as cache_err:
+                    logger.warning("Failed to cache session to intraday memory: %s", cache_err)
+
+                # Persist session summary to MemPalace immediately so it's
+                # searchable right away (don't rely solely on next-day consolidation)
+                try:
+                    mem = StudyMemory(palace_path=config.MEMPALACE_PALACE_PATH)
+                    mem.persist(self.session)
+                    logger.info("Session summary persisted to MemPalace.")
+                except Exception as mp_err:
+                    logger.warning("Failed to persist session to MemPalace: %s", mp_err)
+
+                self.session.persisted = True
+        except Exception as e:
+            logger.warning("Failed to save companion state: %s", e)
 
 

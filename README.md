@@ -98,7 +98,7 @@ On your Windows host, open a PowerShell or Command Prompt terminal in the projec
 # Run the watchdog client
 python win_watchdog.py
 ```
-This client will monitor your active window title/process and active browser tab URLs, sending them to the Bot Server every 30 seconds.
+This client will monitor your active window title/process and active browser tab URLs, sending them to the Bot Server every 5 seconds.
 
 ### 4. Start Coaching
 1. Open your browser and navigate to: [http://localhost:7860](http://localhost:7860)

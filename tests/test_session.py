@@ -4,8 +4,8 @@ from session import Session, WindowSnapshot
 def test_session_default_values():
     s = Session()
     assert s.plan == ""
-    assert s.persona == "A friendly, encouraging, and supportive study coach (Friendly Coach)"
-    assert s.snapshot_history == []
+    assert s.persona == "Warm emotional companion"
+    assert len(s.snapshot_history) == 0
     assert s.distraction_count == 0
     assert s.conversation_history == []
 

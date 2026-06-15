@@ -1,5 +1,17 @@
+"""Configuration settings and classification rule loaders for the AI Study Buddy.
+
+Defines API credentials, thresholds for session tracking (e.g. idle thresholds, focus streaks),
+audio sampling settings, and persistent heuristics for process/website domain classification
+(study-related, distractions, or dual-use). Reads environment variables from the `.env` file.
+"""
+
+import json
+import logging
 import os
+import tempfile
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -36,6 +48,9 @@ INTERVENTION_COOLDOWN_SECONDS: int = 300    # 5 min minimum between intervention
 FOCUS_STREAK_THRESHOLD_SECONDS: int = 1500  # 25 min focus for positive reinforcement
 MAX_DISTRACTION_ESCALATIONS: int = 5        # after this many, coach shifts to reflective mode
 
+# Companion persona
+COMPANION_NAME: str = os.getenv("COMPANION_NAME", "Luna")
+
 # Session history
 MAX_SNAPSHOT_HISTORY: int = 20
 
@@ -53,42 +68,27 @@ AUDIO_INPUT_DEVICE_INDEX: int | None = None
 AUDIO_OUTPUT_DEVICE_INDEX: int | None = None
 AUDIO_DEVICE_SAMPLE_RATE: int = int(os.getenv("AUDIO_DEVICE_SAMPLE_RATE", "16000"))  # SileroVAD requirement
 
-# Heuristic classifier — domains classified without calling Claude
-KNOWN_DISTRACTION_DOMAINS: set[str] = {
-    "netflix.com",
-    "instagram.com",
-    "reddit.com",
-    "twitter.com",
-    "x.com",
-    "tiktok.com",
-    "facebook.com",
-    "twitch.tv",
-    "9gag.com",
-    "spotify.com",
-}
-
-KNOWN_STUDY_DOMAINS: set[str] = {
-    "khanacademy.org",
-    "notion.so",
-    "coursera.org",
-    "edx.org",
-    "brilliant.org",
-    "wolframalpha.com",
-    "desmos.com",
-    "scholar.google.com",
-    "wikipedia.org",
-}
-
-# Heuristic classifier — process names (lowercased .exe) classified without Claude
+# Heuristic classifier — populated by load_dynamic_rules() on import
+KNOWN_DISTRACTION_DOMAINS: set[str] = set()
+KNOWN_STUDY_DOMAINS: set[str] = set()
 KNOWN_DISTRACTION_PROCESSES: set[str] = set()
 KNOWN_STUDY_PROCESSES: set[str] = set()
-
-# Dual-use targets (require verification when opened)
 KNOWN_DUAL_USE_DOMAINS: set[str] = set()
 KNOWN_DUAL_USE_PROCESSES: set[str] = set()
 
+# Canonical set of browser process names (used across modules)
+BROWSER_PROCESSES: frozenset[str] = frozenset({
+    "chrome.exe", "msedge.exe", "brave.exe", "opera.exe",
+    "firefox.exe", "safari.exe", "iexplore.exe",
+    "librewolf.exe", "floorp.exe", "arc.exe",
+})
+
+def strip_www(domain: str) -> str:
+    """Remove leading 'www.' from a domain name."""
+    return domain[4:] if domain.startswith("www.") else domain
+
+
 # --- Dynamic Persistence Logic ---
-import json
 
 DYNAMIC_RULES_PATH = "watchdog_rules.json"
 
@@ -120,7 +120,7 @@ def load_dynamic_rules():
             with open(DYNAMIC_RULES_PATH, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_RULES, f, indent=2)
         except Exception as e:
-            print(f"Failed to write default rules: {e}")
+            logger.error("Failed to write default rules: %s", e)
 
     try:
         with open(DYNAMIC_RULES_PATH, "r", encoding="utf-8") as f:
@@ -145,83 +145,75 @@ def load_dynamic_rules():
         KNOWN_DUAL_USE_DOMAINS.clear()
         KNOWN_DUAL_USE_DOMAINS.update(rules.get("dual_use_domains", DEFAULT_RULES["dual_use_domains"]))
     except Exception as e:
-        print(f"Failed to load dynamic rules: {e}")
+        logger.error("Failed to load dynamic rules: %s", e)
+
+def _save_rules() -> None:
+    """Persist current classification sets to disk atomically."""
+    rules = {
+        "study_processes": sorted(KNOWN_STUDY_PROCESSES),
+        "distraction_processes": sorted(KNOWN_DISTRACTION_PROCESSES),
+        "dual_use_processes": sorted(KNOWN_DUAL_USE_PROCESSES),
+        "study_domains": sorted(KNOWN_STUDY_DOMAINS),
+        "distraction_domains": sorted(KNOWN_DISTRACTION_DOMAINS),
+        "dual_use_domains": sorted(KNOWN_DUAL_USE_DOMAINS),
+    }
+    import time
+    try:
+        fd, tmp_path = tempfile.mkstemp(suffix=".json", dir=".")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(rules, f, indent=2)
+            
+            for attempt in range(5):
+                try:
+                    os.replace(tmp_path, DYNAMIC_RULES_PATH)
+                    break
+                except PermissionError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
+        except BaseException:
+            if os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+            raise
+    except Exception as e:
+        logger.error("Failed to save dynamic rules: %s", e)
+
 
 def add_dynamic_classification(name: str, is_domain: bool, status: str):
     """Add a target to the dynamic classification lists and persist it."""
     name_lower = name.lower()
-    
-    # 1. Update active sets in memory
     if is_domain:
-        if status == "study":
-            KNOWN_STUDY_DOMAINS.add(name_lower)
-            KNOWN_DISTRACTION_DOMAINS.discard(name_lower)
-            KNOWN_DUAL_USE_DOMAINS.discard(name_lower)
-        elif status == "distraction":
-            KNOWN_DISTRACTION_DOMAINS.add(name_lower)
-            KNOWN_STUDY_DOMAINS.discard(name_lower)
-            KNOWN_DUAL_USE_DOMAINS.discard(name_lower)
-        elif status == "dual_use":
-            KNOWN_DUAL_USE_DOMAINS.add(name_lower)
-            KNOWN_STUDY_DOMAINS.discard(name_lower)
-            KNOWN_DISTRACTION_DOMAINS.discard(name_lower)
+        name_lower = strip_www(name_lower)
+
+    # Pick the three sets to update (domain vs process)
+    if is_domain:
+        sets = {"study": KNOWN_STUDY_DOMAINS, "distraction": KNOWN_DISTRACTION_DOMAINS, "dual_use": KNOWN_DUAL_USE_DOMAINS}
     else:
-        if status == "study":
-            KNOWN_STUDY_PROCESSES.add(name_lower)
-            KNOWN_DISTRACTION_PROCESSES.discard(name_lower)
-            KNOWN_DUAL_USE_PROCESSES.discard(name_lower)
-        elif status == "distraction":
-            KNOWN_DISTRACTION_PROCESSES.add(name_lower)
-            KNOWN_STUDY_PROCESSES.discard(name_lower)
-            KNOWN_DUAL_USE_PROCESSES.discard(name_lower)
-        elif status == "dual_use":
-            KNOWN_DUAL_USE_PROCESSES.add(name_lower)
-            KNOWN_STUDY_PROCESSES.discard(name_lower)
-            KNOWN_DISTRACTION_PROCESSES.discard(name_lower)
-            
-    # 2. Persist to dynamic config file
-    rules = {
-        "study_processes": sorted(list(KNOWN_STUDY_PROCESSES)),
-        "distraction_processes": sorted(list(KNOWN_DISTRACTION_PROCESSES)),
-        "dual_use_processes": sorted(list(KNOWN_DUAL_USE_PROCESSES)),
-        "study_domains": sorted(list(KNOWN_STUDY_DOMAINS)),
-        "distraction_domains": sorted(list(KNOWN_DISTRACTION_DOMAINS)),
-        "dual_use_domains": sorted(list(KNOWN_DUAL_USE_DOMAINS))
-    }
-    
-    try:
-        with open(DYNAMIC_RULES_PATH, "w", encoding="utf-8") as f:
-            json.dump(rules, f, indent=2)
-    except Exception as e:
-        print(f"Failed to save dynamic rules: {e}")
+        sets = {"study": KNOWN_STUDY_PROCESSES, "distraction": KNOWN_DISTRACTION_PROCESSES, "dual_use": KNOWN_DUAL_USE_PROCESSES}
+
+    for key, s in sets.items():
+        if key == status:
+            s.add(name_lower)
+        else:
+            s.discard(name_lower)
+
+    _save_rules()
+
 
 def delete_dynamic_classification(name: str, is_domain: bool):
     """Delete a target from all dynamic classification lists and persist it."""
     name_lower = name.lower()
-    
     if is_domain:
-        KNOWN_STUDY_DOMAINS.discard(name_lower)
-        KNOWN_DISTRACTION_DOMAINS.discard(name_lower)
-        KNOWN_DUAL_USE_DOMAINS.discard(name_lower)
-    else:
-        KNOWN_STUDY_PROCESSES.discard(name_lower)
-        KNOWN_DISTRACTION_PROCESSES.discard(name_lower)
-        KNOWN_DUAL_USE_PROCESSES.discard(name_lower)
-        
-    rules = {
-        "study_processes": sorted(list(KNOWN_STUDY_PROCESSES)),
-        "distraction_processes": sorted(list(KNOWN_DISTRACTION_PROCESSES)),
-        "dual_use_processes": sorted(list(KNOWN_DUAL_USE_PROCESSES)),
-        "study_domains": sorted(list(KNOWN_STUDY_DOMAINS)),
-        "distraction_domains": sorted(list(KNOWN_DISTRACTION_DOMAINS)),
-        "dual_use_domains": sorted(list(KNOWN_DUAL_USE_DOMAINS))
-    }
-    
-    try:
-        with open(DYNAMIC_RULES_PATH, "w", encoding="utf-8") as f:
-            json.dump(rules, f, indent=2)
-    except Exception as e:
-        print(f"Failed to save dynamic rules after delete: {e}")
+        name_lower = strip_www(name_lower)
+
+    for s in (KNOWN_STUDY_DOMAINS, KNOWN_DISTRACTION_DOMAINS, KNOWN_DUAL_USE_DOMAINS) if is_domain else (KNOWN_STUDY_PROCESSES, KNOWN_DISTRACTION_PROCESSES, KNOWN_DUAL_USE_PROCESSES):
+        s.discard(name_lower)
+
+    _save_rules()
 
 # Load dynamic rules on module import
 load_dynamic_rules()

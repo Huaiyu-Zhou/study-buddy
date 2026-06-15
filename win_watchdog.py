@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import aiohttp
+import re
 
 from watchdog import get_active_window_info, get_idle_seconds, get_browser_url, terminate_process, CHROMIUM_PROCESSES
 import config
@@ -14,11 +15,18 @@ logger = logging.getLogger("win_watchdog")
 SERVER_URL = "http://localhost:7860/activity"
 
 async def run_watchdog():
+    """Main client loop running on the Windows host.
+
+    Polls the active window and idle state, reads browser URLs when possible,
+    and sends HTTP POST updates to the Bot Server. Listens for server actions
+    to terminate distracting processes or close tabs.
+    """
     logger.info("Windows watchdog client started. Sending updates to %s", SERVER_URL)
 
     async with aiohttp.ClientSession() as session:
         while True:
             try:
+                # Capture host window metrics
                 process, title, pid = get_active_window_info()
                 idle = get_idle_seconds()
                 url = get_browser_url(process)
@@ -34,7 +42,8 @@ async def run_watchdog():
                     )
                     for domain in all_domains:
                         keyword = domain.split('.')[0]
-                        if keyword in title_lower:
+                        # Match keyword as a whole word to prevent false positives (e.g. 'x' matching any title for x.com)
+                        if re.search(r'\b' + re.escape(keyword) + r'\b', title_lower):
                             url = f"https://{domain}"
                             logger.info(
                                 "Fallback: extracted URL from title: %r -> %s",

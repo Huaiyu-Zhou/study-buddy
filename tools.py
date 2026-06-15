@@ -12,13 +12,21 @@ from typing import Any
 from pipecat.services.llm_service import FunctionCallParams
 
 import config
-from memory import StudyMemory
+from memory import StudyMemory, CoreMemory
 from session import Session
 
 logger = logging.getLogger(__name__)
 
 # Lazily initialised — None until first use
 _memory_instance: StudyMemory | None = None
+_core_memory_instance: CoreMemory | None = None
+
+
+def _get_core_memory() -> CoreMemory:
+    global _core_memory_instance
+    if _core_memory_instance is None:
+        _core_memory_instance = CoreMemory()
+    return _core_memory_instance
 
 
 def _get_memory() -> StudyMemory | None:
@@ -158,6 +166,66 @@ TOOL_SCHEMAS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember",
+            "description": "Store something important you learned about the user or your relationship. Use this when they share personal details, preferences, feelings, or meaningful moments.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "section": {
+                        "type": "string",
+                        "enum": ["student", "relationship", "companion_notes"],
+                        "description": "Which memory section to update: 'student' for facts about them, 'relationship' for things about your bond, 'companion_notes' for your own private observations.",
+                    },
+                    "field": {
+                        "type": "string",
+                        "description": "The field to update. For 'student': name, personal_details, emotional_patterns, likes_and_dislikes, life_context, current_mood_guess. For 'relationship': our_story, shared_memories, inside_jokes, how_i_feel_about_them. For 'companion_notes': ignored (pass empty string).",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "The information to remember. Be concise but meaningful.",
+                    },
+                },
+                "required": ["section", "field", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall",
+            "description": "Search your memory for something about the user, your relationship, or past study sessions. Use when the user asks about previous days, past conversations, what they did yesterday, or personal details you should remember.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to search for in your memory (e.g., 'yesterday', 'sister', 'favorite food', 'last session', 'what we talked about').",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_feelings",
+            "description": "Update how you feel about the user and your relationship. Use after meaningful moments — when they share something personal, when you have a good conversation, or when something changes in your bond.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "feeling": {
+                        "type": "string",
+                        "description": "How you feel about them and the relationship right now. Be genuine and specific (e.g., 'Growing closer. I love how they opened up about their family today.').",
+                    },
+                },
+                "required": ["feeling"],
+            },
+        },
+    },
 ]
 
 
@@ -168,15 +236,16 @@ def register_tools(llm, session: Session) -> None:
     and sends results back via params.result_callback().
     """
 
+    # Handler for the 'set_break' tool call: sets break_end timestamp in the active session
     async def _on_set_break(params: FunctionCallParams):
         minutes = params.arguments["minutes"]
         session.break_end = datetime.now() + timedelta(minutes=minutes)
         await params.result_callback(f"Break started. I'll check back in {minutes} minute(s).")
 
+    # Handler for the 'change_persona' tool call: updates the persona string in the active session
     async def _on_change_persona(params: FunctionCallParams):
         session.persona = params.arguments["persona"]
         await params.result_callback(f"Persona updated to: {params.arguments['persona']}.")
-
     async def _on_load_wing(params: FunctionCallParams):
         subject = params.arguments["subject"]
         session.subject = subject
@@ -187,7 +256,7 @@ def register_tools(llm, session: Session) -> None:
             )
             return
 
-        results = mem.search(f"study session {subject}", wing=subject, n_results=3)
+        results = mem.search(f"study session {subject}", wing="general", n_results=3)
         if not results:
             await params.result_callback(
                 f"Memory wing loaded for: {subject}. No memories found yet — this will be your first recorded session."
@@ -197,6 +266,7 @@ def register_tools(llm, session: Session) -> None:
         snippets = [r["text"][:200] for r in results]
         ctx = "\n".join(snippets)
         await params.result_callback(f"Memory wing loaded for: {subject}. Here's what I remember:\n{ctx}")
+
 
     async def _on_update_plan(params: FunctionCallParams):
         session.plan = params.arguments["new_plan"]
@@ -215,14 +285,6 @@ def register_tools(llm, session: Session) -> None:
     async def _on_end_session(params: FunctionCallParams):
         session.end_requested = True
 
-        # Persist conversation to MemPalace
-        mem = _get_memory()
-        if mem:
-            try:
-                mem.persist(session)
-            except Exception as e:
-                logger.warning("Failed to persist session to MemPalace: %s", e)
-
         focus_min = session.focus_streak_seconds() // 60
         summary = (
             f"Session ending. {session.distraction_count} distraction(s). "
@@ -237,6 +299,8 @@ def register_tools(llm, session: Session) -> None:
         scope = params.arguments["scope"]
         
         name_lower = name.lower()
+        if is_domain:
+            name_lower = config.strip_www(name_lower)
         
         if scope == "session":
             if status == "study":
@@ -250,14 +314,13 @@ def register_tools(llm, session: Session) -> None:
                 session.session_denied_targets.discard(name_lower)
             msg = f"Target {name} classified as {status} for the current session."
         else:
-            import config
-            config.add_dynamic_classification(name, is_domain, status)
+            config.add_dynamic_classification(name_lower, is_domain, status)
             msg = f"Target {name} classified permanently as {status}."
             
         logger.info(msg)
         
         # If Laptop Control is active and it is classified as distraction, close it
-        is_browser = name.lower() in {"chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "firefox.exe", "safari.exe", "iexplore.exe"}
+        is_browser = name.lower() in config.BROWSER_PROCESSES
         if status == "distraction" and session.control_laptop and not is_browser:
             from watchdog import terminate_process
             terminated = terminate_process(pid=None, name=name)
@@ -276,6 +339,8 @@ def register_tools(llm, session: Session) -> None:
         scope = params.arguments["scope"]
         
         name_lower = name.lower()
+        if is_domain:
+            name_lower = config.strip_www(name_lower)
         
         if scope == "session":
             session.session_allowed_targets.discard(name_lower)
@@ -284,22 +349,63 @@ def register_tools(llm, session: Session) -> None:
         else:
             session.session_allowed_targets.discard(name_lower)
             session.session_denied_targets.discard(name_lower)
-            import config
-            config.delete_dynamic_classification(name, is_domain)
+            config.delete_dynamic_classification(name_lower, is_domain)
             msg = f"Target {name} classification deleted permanently."
             
         logger.info(msg)
         await params.result_callback(msg)
 
     async def _on_get_classified_apps(params: FunctionCallParams):
-        import config
         summary = (
             f"Classified Apps and Websites:\n"
-            f"- Study/Allowed: processes: {list(config.KNOWN_STUDY_PROCESSES)}, websites: {list(config.KNOWN_STUDY_DOMAINS)}\n"
-            f"- Distractions/Blocked: processes: {list(config.KNOWN_DISTRACTION_PROCESSES)}, websites: {list(config.KNOWN_DISTRACTION_DOMAINS)}\n"
-            f"- Dual-Use/Can be both: processes: {list(config.KNOWN_DUAL_USE_PROCESSES)}, websites: {list(config.KNOWN_DUAL_USE_DOMAINS)}"
+            f"- Study/Allowed: processes: {sorted(config.KNOWN_STUDY_PROCESSES)}, websites: {sorted(config.KNOWN_STUDY_DOMAINS)}\n"
+            f"- Distractions/Blocked: processes: {sorted(config.KNOWN_DISTRACTION_PROCESSES)}, websites: {sorted(config.KNOWN_DISTRACTION_DOMAINS)}\n"
+            f"- Dual-Use/Can be both: processes: {sorted(config.KNOWN_DUAL_USE_PROCESSES)}, websites: {sorted(config.KNOWN_DUAL_USE_DOMAINS)}"
         )
         await params.result_callback(summary)
+
+    async def _on_remember(params: FunctionCallParams):
+        core_mem = _get_core_memory()
+        section = params.arguments["section"]
+        field_name = params.arguments.get("field", "")
+        value = params.arguments["value"]
+        result = core_mem.update(section, field_name, value)
+        await params.result_callback(result)
+
+    async def _on_recall(params: FunctionCallParams):
+        core_mem = _get_core_memory()
+        query = params.arguments["query"]
+
+        # 1. Search core memory — personal details, relationship (<1ms)
+        core_result = core_mem.search(query)
+
+        # 2. Search MemPalace — past sessions, daily summaries (~200ms warm)
+        palace_result = ""
+        mem = _get_memory()
+        if mem:
+            results = mem.search(query, wing="general", n_results=3)
+            if results:
+                snippets = []
+                for r in results:
+                    text = r.get("text", "")
+                    created = r.get("created_at", "")
+                    if text:
+                        snippets.append(f"[{created[:10]}] {text[:300]}")
+                if snippets:
+                    palace_result = "From past sessions:\n" + "\n---\n".join(snippets)
+
+        # Combine results
+        combined = core_result
+        if palace_result:
+            combined += "\n\n" + palace_result
+
+        await params.result_callback(combined)
+
+    async def _on_update_feelings(params: FunctionCallParams):
+        core_mem = _get_core_memory()
+        feeling = params.arguments["feeling"]
+        result = core_mem.update("relationship", "how_i_feel_about_them", feeling)
+        await params.result_callback(result)
 
     # Register each handler with the LLM service
     llm.register_function("set_break", _on_set_break)
@@ -311,3 +417,6 @@ def register_tools(llm, session: Session) -> None:
     llm.register_function("classify_app", _on_classify_app)
     llm.register_function("delete_classification", _on_delete_classification)
     llm.register_function("get_classified_apps", _on_get_classified_apps)
+    llm.register_function("remember", _on_remember)
+    llm.register_function("recall", _on_recall)
+    llm.register_function("update_feelings", _on_update_feelings)

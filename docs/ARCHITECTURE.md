@@ -10,7 +10,7 @@
 │  │                     Pipecat Pipeline                        │   │
 │  │                                                             │   │
 │  │  ┌───────────┐    ┌───────────┐    ┌────────────────────┐  │   │
-│  │  │  Whisper  │───▶│  Claude  │───▶│  Fish Audio Turbo  │  │   │
+│  │  │  Whisper  │───▶│  OpenAI  │───▶│  Fish Audio Turbo  │  │   │
 │  │  │  STT      │    │  (Brain) │    │  TTS (streaming)   │  │   │
 │  │  │  + VAD    │    │          │    │                    │  │   │
 │  │  └───────────┘    └────┬─────┘    └────────────────────┘  │   │
@@ -63,7 +63,7 @@ User speaks (Browser mic)
 
 ## Activity Detection (The Watchdog)
 
-The watchdog runs locally on the Windows host as `win_watchdog.py`. It polls the active window using `pywin32` every 30 seconds, and sends a snapshot to the server running in WSL/Linux via an HTTP POST request to `/activity`.
+The watchdog runs locally on the Windows host as `win_watchdog.py`. It polls the active window using `pywin32` every 5 seconds, and sends a snapshot to the server running in WSL/Linux via an HTTP POST request to `/activity`.
 
 ### What it captures
 
@@ -102,13 +102,17 @@ The LLM receives this as a pipeline input and triggers TTS immediately — the c
 
 ---
 
-## Memory System (MemPalace)
+## Memory System (Three-Tier Memory)
 
-**MemPalace** (`pip install mempalace`) is a local-first long-term memory system for AI
-agents. It stores verbatim conversation history and retrieves relevant context via semantic
-search. No cloud storage — everything stays on the machine.
+The system uses a **Three-Tier Memory System** to manage short-term and long-term context:
 
-### Spatial hierarchy
+1. **Active Session Memory (Working Memory):** The live conversation turns in the current session.
+2. **Intra-Day Cache (Short-Term Memory):** Saved in `today_history.json`. It carries over the clean raw conversation turns and list of closed distractions across multiple sessions on the same calendar day.
+3. **Long-Term Memory (MemPalace & CoreMemory):**
+   * **MemPalace** (`pip install mempalace`) is a local-first memory repository. At the start of a new calendar day (lazy-checked on startup), the system consolidates yesterday's raw cache, runs a reflection summary using the LLM, and writes a single cohesive daily summary (including focus stats, distraction counts, and key conversational arcs) into `MemPalace`'s `general` wing.
+   * **CoreMemory** (`core_memory.json`) stores high-level relationship details and facts about the user (e.g. name, preferences) injected into the prompt and updated via tool calls.
+
+### Spatial hierarchy (MemPalace)
 
 ```
 Wing: Calculus          ← one per subject / study domain
@@ -118,33 +122,27 @@ Wing: Biology
   Room: Cell division
 ```
 
-### Session wake-up
+### Session wake-up & Daily stats
 
-At the start of each session, the app runs a wake-up query against the relevant wing to
-pull historical context into Claude's system prompt:
+At the start of each session, the app:
+1. Performs date comparison on `today_history.json`. If it's a new day, yesterday's history is consolidated into the `general` wing in MemPalace and the cache is cleared.
+2. Restores today's previous chat history from the cache if on the same day.
+3. Wakes up context from the relevant subject wing in MemPalace.
+4. Queries `study_history.json` for today's app focus stats and closed distractions list, injecting a productivity log directly into the companion's system prompt context.
 
-```
-mempalace wake-up --wing calculus
-```
+### What gets stored on teardown
 
-This gives Claude facts like: "User struggles with integration by parts at the 40-minute
-mark. Responds better to encouragement than pressure on this topic."
-
-### What gets stored
-
-- The user's exact words (verbatim, not summarised)
-- Coach interventions and the user's responses to them
-- Session outcomes ("studied 62 minutes, drifted 3 times")
-- Persona preferences per subject
+- The active session's conversation turns and closed distraction events are appended to the `today_history.json` cache.
+- The `core_memory.json` changes and neural drives are persisted immediately.
 
 ---
 
 ## Tool Calling
 
-Claude uses **function calling** to perform actions during conversation. This is cleaner
+The coach uses **function calling** to perform actions during conversation. This is cleaner
 than parsing intent from free text and directly handles many session management needs.
 
-| User says | Claude calls | Python does |
+| User says | The LLM calls | Python does |
 |---|---|---|
 | "I'm taking 5 minutes" | `set_break(minutes=5)` | Pauses watchdog, starts countdown, alerts when done |
 | "Be less harsh" | `change_persona("friend")` | Updates system prompt for next turn |
@@ -159,8 +157,8 @@ than parsing intent from free text and directly handles many session management 
 
 Two paths to session end — both produce identical outcomes:
 
-- **Voice:** user says "I'm done" / "end session" → Claude calls `end_session()` tool → summary spoken via TTS → session data written to MemPalace → process exits cleanly
-- **Ctrl+C:** signal handler catches SIGINT → same summary + MemPalace write path → process exits cleanly
+- **Voice:** user says "I'm done" / "end session" → the coach calls `end_session()` tool → summary spoken via TTS → session data cached to `today_history.json` → process exits cleanly
+- **Ctrl+C:** signal handler catches SIGINT → same summary + cache save path → process exits cleanly
 
 Neither path requires the user to confirm. The coach speaks the summary regardless of how the session ends.
 
@@ -176,7 +174,7 @@ Tracked in `session.py`, passed to the Pipecat pipeline and watchdog:
 - Off-task streak duration + timestamp
 - Last intervention timestamp (cooldown enforcement)
 - Continuous on-task duration (for positive reinforcement)
-- Conversation history (passed to Claude as context each turn)
+- Conversation history (passed to the LLM as context each turn)
 - Distraction count (for escalation logic — coach gets firmer after repeated offences)
 
 ---
@@ -185,10 +183,10 @@ Tracked in `session.py`, passed to the Pipecat pipeline and watchdog:
 
 **Classification strategy (two-tier to control API cost):**
 
-1. **Fast local heuristics** — obvious cases classified without calling Claude:
+1. **Fast local heuristics** — obvious cases classified without calling the LLM:
    - Known distractions: `youtube.com`, `netflix.com`, `instagram.com`, `reddit.com`, games
    - Known study tools: `khanacademy.org`, `notion.so`, PDF viewers, IDEs
-2. **Claude for ambiguous cases** — anything not in the heuristic lists:
+2. **The LLM for ambiguous cases** — anything not in the heuristic lists:
    - `discord.com` (study group or chat?)
    - `youtube.com/watch?v=...` with an educational title
    - `google.com` (researching or procrastinating?)

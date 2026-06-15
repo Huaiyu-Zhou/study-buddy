@@ -86,8 +86,7 @@ class TestPersist:
         mem = StudyMemory(palace_path=tmp_palace)
         text = mem._build_session_text(session)
         assert "review integrals" in text
-        assert "drill sergeant" in text
-        assert "3 distraction" in text
+        assert "Distractions: 3" in text
         assert "I keep getting distracted" in text
         assert "Let's refocus" in text
 

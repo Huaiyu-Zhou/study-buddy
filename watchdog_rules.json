@@ -1,43 +1,41 @@
 {
   "study_processes": [
-    "acrobat.exe",
-    "anki.exe",
     "code.exe",
-    "idea64.exe",
-    "obsidian.exe",
     "pycharm64.exe",
-    "sumatrapdf.exe"
+    "idea64.exe",
+    "acrobat.exe",
+    "sumatrapdf.exe",
+    "obsidian.exe",
+    "anki.exe"
   ],
   "distraction_processes": [
+    "steam.exe",
     "epicgameslauncher.exe",
-    "spotify.exe",
-    "steam.exe"
+    "spotify.exe"
   ],
-  "dual_use_processes": [
-    "msedge.exe"
-  ],
+  "dual_use_processes": [],
   "study_domains": [
-    "brilliant.org",
-    "classroom.google.com",
-    "coursera.org",
-    "desmos.com",
-    "edx.org",
     "khanacademy.org",
     "notion.so",
-    "wikipedia.org",
-    "wolframalpha.com"
+    "coursera.org",
+    "edx.org",
+    "brilliant.org",
+    "wolframalpha.com",
+    "desmos.com",
+    "scholar.google.com",
+    "wikipedia.org"
   ],
   "distraction_domains": [
-    "9gag.com",
-    "facebook.com",
-    "instagram.com",
     "netflix.com",
+    "instagram.com",
     "reddit.com",
-    "spotify.com",
-    "tiktok.com",
-    "twitch.tv",
     "twitter.com",
-    "x.com"
+    "x.com",
+    "tiktok.com",
+    "facebook.com",
+    "twitch.tv",
+    "9gag.com",
+    "spotify.com"
   ],
   "dual_use_domains": [
     "youtube.com"

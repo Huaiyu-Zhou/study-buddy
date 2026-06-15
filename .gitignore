@@ -21,3 +21,10 @@ scratch/
 get-pip.py
 study_history.json
 
+# Added by code-review-graph
+.code-review-graph/
+
+# Session/companion local database state
+companion_state.json
+core_memory.json
+today_history.json
