@@ -1,8 +1,9 @@
 import asyncio
 import logging
 import aiohttp
+import re
 
-from watchdog import get_active_window_info, get_idle_seconds, get_browser_url, terminate_process
+from watchdog import get_active_window_info, get_idle_seconds, get_browser_url, terminate_process, CHROMIUM_PROCESSES
 import config
 
 logging.basicConfig(
@@ -14,15 +15,42 @@ logger = logging.getLogger("win_watchdog")
 SERVER_URL = "http://localhost:7860/activity"
 
 async def run_watchdog():
+    """Main client loop running on the Windows host.
+
+    Polls the active window and idle state, reads browser URLs when possible,
+    and sends HTTP POST updates to the Bot Server. Listens for server actions
+    to terminate distracting processes or close tabs.
+    """
     logger.info("Windows watchdog client started. Sending updates to %s", SERVER_URL)
 
     async with aiohttp.ClientSession() as session:
         while True:
             try:
+                # Capture host window metrics
                 process, title, pid = get_active_window_info()
                 idle = get_idle_seconds()
                 url = get_browser_url(process)
-                
+
+                # Fallback: if URL extraction failed for a browser, try to
+                # match known domain keywords from the window title.
+                if not url and process in CHROMIUM_PROCESSES and title:
+                    title_lower = title.lower()
+                    all_domains = (
+                        config.KNOWN_DISTRACTION_DOMAINS
+                        | config.KNOWN_STUDY_DOMAINS
+                        | config.KNOWN_DUAL_USE_DOMAINS
+                    )
+                    for domain in all_domains:
+                        keyword = domain.split('.')[0]
+                        # Match keyword as a whole word to prevent false positives (e.g. 'x' matching any title for x.com)
+                        if re.search(r'\b' + re.escape(keyword) + r'\b', title_lower):
+                            url = f"https://{domain}"
+                            logger.info(
+                                "Fallback: extracted URL from title: %r -> %s",
+                                title, url,
+                            )
+                            break
+
                 payload = {
                     "process": process,
                     "window_title": title,
@@ -50,6 +78,26 @@ async def run_watchdog():
                                 target_process = data.get("target_process")
                                 logger.warning("Server requested to close distracting process: %s (PID: %s)", target_process, target_pid)
                                 terminate_process(target_pid, target_process)
+                            elif action == "close_tab":
+                                target_process = data.get("target_process")
+                                current_process, _, _ = get_active_window_info()
+                                if current_process == target_process:
+                                    logger.warning("Server requested to close distracting tab. Simulating Ctrl+W for: %s", target_process)
+                                    try:
+                                        import ctypes
+                                        import time
+                                        # Simulate Ctrl+W
+                                        ctypes.windll.user32.keybd_event(0x11, 0, 0, 0)  # Ctrl down
+                                        time.sleep(0.05)
+                                        ctypes.windll.user32.keybd_event(0x57, 0, 0, 0)  # W down
+                                        time.sleep(0.05)
+                                        ctypes.windll.user32.keybd_event(0x57, 0, 2, 0)  # W up
+                                        time.sleep(0.05)
+                                        ctypes.windll.user32.keybd_event(0x11, 0, 2, 0)  # Ctrl up
+                                    except Exception as e:
+                                        logger.error("Failed to simulate Ctrl+W: %s", e)
+                                else:
+                                    logger.info("Foreground process changed from %s to %s. Aborting Ctrl+W.", target_process, current_process)
                     else:
                         logger.warning("Failed to send window state: HTTP %d", response.status)
                         

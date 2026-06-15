@@ -50,6 +50,20 @@ To run the WebRTC Study Buddy, you will need the following API Keys configured i
 
 ## Setup & Running Instructions
 
+### ⚡ One-Click Quick Start (Windows + WSL)
+If you are on Windows and have WSL (Ubuntu) installed, you can start the entire application (both server, client, and browser dashboard) with a single script:
+
+1. Double-click the **[start_study_buddy.bat](file:///c:/Users/huaiy/OneDrive/Desktop/study-buddy/start_study_buddy.bat)** script in the project root directory.
+2. The script will automatically:
+   - Install/update Python packages inside WSL.
+   - Run the server in WSL.
+   - Run the watchdog client on your Windows host.
+   - Open the web dashboard in your browser.
+
+---
+
+### Manual Setup & Running Instructions
+
 ### 1. Configure the Environment
 Create a `.env` file in the root of the project (on both Windows and WSL if they are separate workspaces, or in the shared directory):
 ```env
@@ -84,7 +98,7 @@ On your Windows host, open a PowerShell or Command Prompt terminal in the projec
 # Run the watchdog client
 python win_watchdog.py
 ```
-This client will monitor your active window title/process and active browser tab URLs, sending them to the Bot Server every 30 seconds.
+This client will monitor your active window title/process and active browser tab URLs, sending them to the Bot Server every 5 seconds.
 
 ### 4. Start Coaching
 1. Open your browser and navigate to: [http://localhost:7860](http://localhost:7860)

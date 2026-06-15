@@ -27,14 +27,14 @@ Both paths deliver the same outcome: spoken summary + MemPalace write.
 
 **Change 1:** Add `end_session()` to the Tool Calling table.
 
-| User says | Claude calls | Python does |
+| User says | The LLM calls | Python does |
 |---|---|---|
 | "I'm done" / "end session" | `end_session()` | Speaks summary, writes to MemPalace, exits cleanly |
 
 **Change 2:** Add a "Session End Flow" section after Session State.
 
 Two paths to session end:
-- Voice: user says "I'm done" → Claude calls `end_session()` tool → summary spoken → MemPalace write → process exits
+- Voice: user says "I'm done" → the coach calls `end_session()` tool → summary spoken → MemPalace write → process exits
 - Ctrl+C: signal handler catches SIGINT → same summary + MemPalace write path → process exits
 
 **Change 3:** Add a "Requirements" section to the bottom.
@@ -43,7 +43,7 @@ Two paths to session end:
 - Windows 10/11 (pywin32 is Windows-only)
 - pywin32 UI Automation (browser URL extraction) may require running as administrator
 - Fish Audio API key required for TTS
-- Anthropic API key required for coaching
+- OpenAI API key required for coaching
 
 ---
 
@@ -58,5 +58,5 @@ Rationale: these are part of the core watchdog-to-pipeline flow, not polish. The
 
 **Change 2:** Phase 8 — rename and narrow scope to:
 - "Ambiguous Activity Classification & User-Initiated Conversation"
-- Send ambiguous windows to Claude for classification (not covered by local heuristics)
+- Send ambiguous windows to the LLM for classification (not covered by local heuristics)
 - User-initiated conversation: "What should I do?" supported at any time

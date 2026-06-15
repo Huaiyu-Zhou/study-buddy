@@ -1,7 +1,13 @@
+"""Main Local Standalone Execution Entrypoint for AI Study Buddy.
+
+Sets up logging, validates required API credentials, instantiates the local session
+and voice pipeline, starts the background activity watchdog, and handles graceful
+cleanup and companion state persistence upon exit.
+"""
+
 import asyncio
 import logging
-import sys
-import os
+
 from voice_pipeline import StudyBuddyVoicePipeline
 from watchdog import watchdog_loop
 from session import Session
@@ -15,6 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger("study_buddy")
 
 async def main():
+    """Validates API keys, initializes core systems, and starts the watchdog/voice loop."""
     # Check for critical API keys before starting
     missing_keys = []
     if not config.FISH_AUDIO_API_KEY:
@@ -64,7 +71,13 @@ async def main():
             await watchdog_task
         except asyncio.CancelledError:
             pass
+        # Save companion state (drives, core memory, and session history)
+        try:
+            await pipeline.save_companion_state()
+        except Exception as save_err:
+            logger.warning(f"Failed to save companion state on exit: {save_err}")
         logger.info("Session ended. Good job studying!")
+
 
 if __name__ == "__main__":
     try:

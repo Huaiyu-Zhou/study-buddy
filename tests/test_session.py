@@ -4,8 +4,8 @@ from session import Session, WindowSnapshot
 def test_session_default_values():
     s = Session()
     assert s.plan == ""
-    assert s.persona == "高冷、严厉、毒舌且掌控欲极强的女S (Strict Queen)"
-    assert s.snapshot_history == []
+    assert s.persona == "Warm emotional companion"
+    assert len(s.snapshot_history) == 0
     assert s.distraction_count == 0
     assert s.conversation_history == []
 
@@ -84,3 +84,11 @@ def test_is_on_break_returns_false_when_break_expired():
 def test_end_requested_defaults_to_false():
     session = Session()
     assert session.end_requested is False
+
+def test_ai_coaching_defaults_to_true():
+    session = Session()
+    assert session.ai_coaching is True
+
+def test_ai_coaching_can_be_set():
+    session = Session(ai_coaching=False)
+    assert session.ai_coaching is False

@@ -8,7 +8,7 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 *Goal: project skeleton, config, dependencies installed and importable*
 
 - [x] `requirements.txt` — pin all dependencies
-- [x] `.env.example` — `ANTHROPIC_API_KEY`, `FISH_AUDIO_API_KEY`
+- [x] `.env.example` — `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `DAILY_API_KEY`, `FISH_AUDIO_API_KEY`
 - [x] `config.py` — intervals, thresholds, model names, voice ID, Whisper model size
 - [x] `session.py` — session state: plan, persona, snapshot history, off-task timer, distraction count, conversation history, focus streak
 
@@ -30,10 +30,10 @@ Ordered by dependency. Each phase produces something runnable before moving on.
 ---
 
 ## Phase 3 — Pipecat Pipeline (no voice yet)
-*Goal: Pipecat pipeline wired up with Claude, text in / text out*
+*Goal: Pipecat pipeline wired up with OpenAI / gpt-4o-mini, text in / text out*
 
 - [x] `pipeline.py` — Pipecat pipeline setup
-- [x] `pipeline.py` — Claude integration with system prompt (plan + persona + conversation history)
+- [x] `pipeline.py` — OpenAI / gpt-4o-mini integration with system prompt (plan + persona + conversation history)
 - [x] `pipeline.py` — tool call definitions (`set_break`, `change_persona`, `load_wing`, `update_plan`, `get_session_summary`)
 - [x] `pipeline.py` — watchdog injection: system message → pipeline when off-task threshold crossed
 - [x] `pipeline.py` — cooldown enforcement: minimum time between interventions (uses `last_intervention_timestamp` from session)

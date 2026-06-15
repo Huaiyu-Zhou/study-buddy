@@ -10,14 +10,15 @@ Handles:
 import asyncio
 import logging
 import os
+import socket
 from datetime import datetime
-from urllib.parse import urlparse
 from typing import Optional
 
 import aiohttp
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pipecat.frames.frames import EndFrame
 
 from pipecat.transports.daily.utils import (
     DailyRESTHelper,
@@ -26,9 +27,9 @@ from pipecat.transports.daily.utils import (
 )
 
 import config
+import history_manager
 from session import Session, WindowSnapshot
 from voice_pipeline import StudyBuddyVoicePipeline
-from watchdog import classify_snapshot
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,16 +52,12 @@ app.add_middleware(
 active_pipeline: Optional[StudyBuddyVoicePipeline] = None
 active_session: Optional[Session] = None
 
-import socket
-
 def get_local_ip() -> str:
     """Detect the server's local network IP address."""
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
     except Exception:
         return "127.0.0.1"
 
@@ -80,7 +77,7 @@ async def serve_frontend():
 @app.post("/connect")
 async def connect(request: Request):
     """Create a Daily room, spawn the bot, and return connection info.
-    Accepts optional plan, persona, subject, and control_laptop from the request.
+    Accepts optional plan, persona, subject, control_laptop, and ai_coaching from the request.
     """
     global active_pipeline, active_session
 
@@ -93,164 +90,140 @@ async def connect(request: Request):
     persona = data.get("persona", "lady_s")
     subject = data.get("subject", "calculus")
     control_laptop = data.get("control_laptop", False)
+    ai_coaching = data.get("ai_coaching", True)
 
     # Clean up any existing active pipeline/session to avoid leaks
     if active_pipeline and active_pipeline.task:
         try:
             logger.info("Cleaning up existing session...")
-            # We can let the runner stop or we just spawn the new one.
+            await active_pipeline.task.queue_frames([EndFrame()])
         except Exception:
-            pass
+            logger.warning("Failed to clean up previous session.")
 
-    # 1. Create a Daily room via REST API
-    async with aiohttp.ClientSession() as http_session:
-        daily_helper = DailyRESTHelper(
-            daily_api_key=config.DAILY_API_KEY,
-            daily_api_url=config.DAILY_API_URL,
-            aiohttp_session=http_session,
-        )
+    if ai_coaching:
+        # 1. Create a Daily room via REST API
+        async with aiohttp.ClientSession() as http_session:
+            daily_helper = DailyRESTHelper(
+                daily_api_key=config.DAILY_API_KEY,
+                daily_api_url=config.DAILY_API_URL,
+                aiohttp_session=http_session,
+            )
 
-        room = await daily_helper.create_room(
-            params=DailyRoomParams(
-                properties=DailyRoomProperties(
-                    exp=int(datetime.now().timestamp()) + 60 * 60 * 4,  # Room expires in 4 hours
-                    enable_chat=False,
+            room = await daily_helper.create_room(
+                params=DailyRoomParams(
+                    properties=DailyRoomProperties(
+                        exp=int(datetime.now().timestamp()) + 60 * 60 * 4,  # Room expires in 4 hours
+                        enable_chat=False,
+                    )
                 )
             )
+
+            # 2. Create tokens for the bot and the client
+            bot_token = await daily_helper.get_token(room.url, expiry_time=60 * 60 * 4)
+            client_token = await daily_helper.get_token(room.url, expiry_time=60 * 60 * 4)
+
+        # 3. Spawn the bot as an async background task
+        asyncio.create_task(_run_bot(room.url, bot_token, plan, persona, subject, control_laptop, ai_coaching))
+
+        # 4. Return the room URL and client token to the frontend
+        return JSONResponse(
+            content={
+                "room_url": room.url,
+                "token": client_token,
+                "ai_coaching": True,
+            }
+        )
+    else:
+        # AI Coaching is disabled (closed)
+        active_session = Session(plan=plan, persona=persona, subject=subject, control_laptop=control_laptop, ai_coaching=False)
+        active_pipeline = None
+        logger.info("AI Coaching is disabled. Spawning watchdog-only session.")
+        return JSONResponse(
+            content={
+                "room_url": "",
+                "token": "",
+                "ai_coaching": False,
+            }
         )
 
-        # 2. Create tokens for the bot and the client
-        bot_token = await daily_helper.get_token(room.url, expiry_time=60 * 60 * 4)
-        client_token = await daily_helper.get_token(room.url, expiry_time=60 * 60 * 4)
 
-    # 3. Spawn the bot as an async background task
-    asyncio.create_task(_run_bot(room.url, bot_token, plan, persona, subject, control_laptop))
-
-    # 4. Return the room URL and client token to the frontend
-    return JSONResponse(
-        content={
-            "room_url": room.url,
-            "token": client_token,
-        }
-    )
-
-@app.api_route("/phone_activity", methods=["GET", "POST"])
-async def phone_activity(request: Request):
-    """Receive notifications when the user interacts with their mobile phone."""
-    global active_pipeline, active_session
-    if not active_pipeline or not active_session:
-        return {"status": "no_active_session"}
-
-    # Extract parameters from query string or JSON payload
-    app_name = request.query_params.get("app", "Phone")
-    event = request.query_params.get("event", "unlock")
-
-    if request.method == "POST":
-        try:
-            data = await request.json()
-            app_name = data.get("app", app_name)
-            event = data.get("event", event)
-        except Exception:
-            pass
-
-    logger.warning("Phone activity webhook received: app=%s, event=%s", app_name, event)
-
-    # Enforce phone intervention cooldown
-    since_last = active_session.seconds_since_last_intervention()
-    if since_last is not None and since_last < config.PHONE_COOLDOWN_SECONDS:
-        logger.info("Phone activity warning suppressed due to cooldown (%ds since last)", since_last)
-        return {"status": "cooldown_active"}
-
-    # Trigger verbal phone scolding
-    asyncio.create_task(active_pipeline.intervene_phone(app_name=app_name))
-
-    return {
-        "status": "success",
-        "distraction_count": active_session.distraction_count,
-    }
 
 @app.post("/activity")
 async def update_activity(request: Request):
     """Receive activity updates from the win_watchdog client."""
     global active_pipeline, active_session
-    if not active_pipeline or not active_session:
+    if not active_session:
         return {"status": "no_active_session"}
 
+    # Parse JSON payload from the watchdog client
     data = await request.json()
-    process = data.get("process", "unknown")
-    title = data.get("window_title", "")
-    url = data.get("url")
-    idle = data.get("idle_seconds", 0)
-    pid = data.get("pid")
-
+    
+    # Construct a local WindowSnapshot object from the request parameters.
+    # is_on_task starts as None, and will be resolved by local classifiers.
     snapshot = WindowSnapshot(
         timestamp=datetime.now(),
-        process=process,
-        window_title=title,
-        url=url,
-        idle_seconds=idle,
+        process=data.get("process", "unknown"),
+        window_title=data.get("window_title", ""),
+        url=data.get("url"),
+        idle_seconds=data.get("idle_seconds", 0),
         is_on_task=None,
-        pid=pid,
+        pid=data.get("pid"),
     )
-    
-    # Classify using dynamic & session state
-    snapshot.is_on_task = classify_snapshot(snapshot, active_session)
 
-    active_session.snapshot_history.append(snapshot)
-    if len(active_session.snapshot_history) > config.MAX_SNAPSHOT_HISTORY:
-        active_session.snapshot_history.pop(0)
+    # Shared logic: classify target, update session state, and determine action flags.
+    # Runs the same classification machine as the local direct watchdog client.
+    from watchdog import process_snapshot, WatchdogResult
+    result = process_snapshot(snapshot, active_session)
 
     logger.info(
         "watchdog update: process=%s title=%r url=%s idle=%ds on_task=%s",
-        process, title, url, idle, snapshot.is_on_task,
+        snapshot.process, snapshot.window_title, snapshot.url,
+        snapshot.idle_seconds, snapshot.is_on_task,
     )
 
+    # Record to history (server-only concern)
+    if snapshot.idle_seconds < config.IDLE_THRESHOLD_SECONDS:
+        try:
+            history_manager.record_activity(
+                result.target_name, result.is_focus, config.WATCHDOG_INTERVAL_SECONDS,
+            )
+        except Exception as e:
+            logger.error("Failed to record activity: %s", e)
+
+    # Build response action payload
     action_payload = {}
 
-    # Process task state machine and save stats to history manager
-    if idle < config.IDLE_THRESHOLD_SECONDS:
-        # Determine target name
-        target = urlparse(snapshot.url).netloc.lower() if snapshot.url else snapshot.process
-        if target.startswith("www."):
-            target = target[4:]
-        is_focus = (snapshot.is_on_task is True)
-        
-        try:
-            import history_manager
-            history_manager.record_activity(target, is_focus, config.WATCHDOG_INTERVAL_SECONDS)
-        except Exception as e:
-            logger.error(f"Failed to record activity in history_manager: {e}")
+    if result.should_query:
+        logger.info("watchdog update: target '%s' requires classification.", result.query_target)
+        if active_pipeline:
+            asyncio.create_task(active_pipeline.maybe_intervene(force=True, query_target=result.query_target))
+    elif result.should_intervene:
+        if result.should_close_process:
+            logger.warning("watchdog update: distracting process! Requiring client to close: %s", snapshot.process)
+            action_payload = {
+                "action": "close_process",
+                "target_pid": snapshot.pid,
+                "target_process": snapshot.process,
+            }
+            active_session.closed_distractions.append({
+                "timestamp": datetime.now().isoformat(),
+                "target": snapshot.process
+            })
+        elif result.should_close_tab:
+            logger.warning("watchdog update: distracting website on '%s'. Requiring client to close tab.", snapshot.process)
+            action_payload = {
+                "action": "close_tab",
+                "target_process": snapshot.process,
+            }
+            active_session.closed_distractions.append({
+                "timestamp": datetime.now().isoformat(),
+                "target": snapshot.url or snapshot.window_title or "distracting website"
+            })
+        if active_pipeline:
+            asyncio.create_task(active_pipeline.maybe_intervene(force=True))
 
-        if snapshot.is_on_task is None:
-            # Query trigger logic for new/dual-use app
-            target = urlparse(snapshot.url).netloc.lower() if snapshot.url else snapshot.process
-            if target.startswith("www."):
-                target = target[4:]
-                
-            if target and target not in active_session.queried_targets:
-                active_session.queried_targets.add(target)
-                logger.info("watchdog update: target '%s' requires classification. Triggering query.", target)
-                asyncio.create_task(active_pipeline.maybe_intervene(force=True, query_target=target))
-                
-        elif snapshot.is_on_task is False:
-            if active_session.off_task_start is None:
-                active_session.off_task_start = datetime.now()
-            
-            if active_session.control_laptop:
-                logger.warning("watchdog update: distracting process detected! Requiring client to close: %s", process)
-                asyncio.create_task(active_pipeline.maybe_intervene(force=True))
-                action_payload = {
-                    "action": "close_process",
-                    "target_pid": snapshot.pid,
-                    "target_process": snapshot.process,
-                }
-            else:
-                asyncio.create_task(active_pipeline.maybe_intervene(force=False))
-                
-        elif snapshot.is_on_task is True:
-            active_session.off_task_start = None
-            if active_session.focus_streak_start is None:
-                active_session.focus_streak_start = datetime.now()
+    elif result.should_reinforce:
+        if active_pipeline:
             asyncio.create_task(active_pipeline.maybe_reinforce())
 
     resp_content = {
@@ -284,24 +257,44 @@ async def get_session_stats():
 @app.get("/history")
 async def get_history():
     """Retrieve persistent study history for the frontend calendar."""
-    import history_manager
     return history_manager.load_history()
 
 @app.get("/classifications")
 async def get_classifications():
     """Retrieve all current classifications (study, distraction, and dual_use)."""
+    study_processes = set(config.KNOWN_STUDY_PROCESSES)
+    study_domains = set(config.KNOWN_STUDY_DOMAINS)
+    distraction_processes = set(config.KNOWN_DISTRACTION_PROCESSES)
+    distraction_domains = set(config.KNOWN_DISTRACTION_DOMAINS)
+    dual_use_processes = set(config.KNOWN_DUAL_USE_PROCESSES)
+    dual_use_domains = set(config.KNOWN_DUAL_USE_DOMAINS)
+
+    if active_session:
+        for target in active_session.session_allowed_targets:
+            display_target = f"{target} (session only)"
+            if "." in target and not target.endswith(".exe"):
+                study_domains.add(display_target)
+            else:
+                study_processes.add(display_target)
+        for target in active_session.session_denied_targets:
+            display_target = f"{target} (session only)"
+            if "." in target and not target.endswith(".exe"):
+                distraction_domains.add(display_target)
+            else:
+                distraction_processes.add(display_target)
+
     return {
         "study": {
-            "processes": sorted(list(config.KNOWN_STUDY_PROCESSES)),
-            "domains": sorted(list(config.KNOWN_STUDY_DOMAINS))
+            "processes": sorted(study_processes),
+            "domains": sorted(study_domains)
         },
         "distraction": {
-            "processes": sorted(list(config.KNOWN_DISTRACTION_PROCESSES)),
-            "domains": sorted(list(config.KNOWN_DISTRACTION_DOMAINS))
+            "processes": sorted(distraction_processes),
+            "domains": sorted(distraction_domains)
         },
         "dual_use": {
-            "processes": sorted(list(config.KNOWN_DUAL_USE_PROCESSES)),
-            "domains": sorted(list(config.KNOWN_DUAL_USE_DOMAINS))
+            "processes": sorted(dual_use_processes),
+            "domains": sorted(dual_use_domains)
         }
     }
 
@@ -320,7 +313,19 @@ async def classify(request: Request):
     if not name or is_domain is None or not status:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Missing required fields (name, is_domain, status)"})
         
-    config.add_dynamic_classification(name, is_domain, status)
+    if name.endswith(" (session only)"):
+        name = name[:-15]
+
+    name_lower = name.lower()
+    if is_domain:
+        name_lower = config.strip_www(name_lower)
+
+    config.add_dynamic_classification(name_lower, is_domain, status)
+    
+    if active_session:
+        active_session.session_allowed_targets.discard(name_lower)
+        active_session.session_denied_targets.discard(name_lower)
+        
     return {"status": "success"}
 
 @app.post("/classify/delete")
@@ -337,7 +342,19 @@ async def delete_classification(request: Request):
     if not name or is_domain is None:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Missing required fields (name, is_domain)"})
         
-    config.delete_dynamic_classification(name, is_domain)
+    if name.endswith(" (session only)"):
+        name = name[:-15]
+
+    name_lower = name.lower()
+    if is_domain:
+        name_lower = config.strip_www(name_lower)
+
+    config.delete_dynamic_classification(name_lower, is_domain)
+    
+    if active_session:
+        active_session.session_allowed_targets.discard(name_lower)
+        active_session.session_denied_targets.discard(name_lower)
+        
     return {"status": "success"}
 
 @app.post("/stop")
@@ -345,30 +362,60 @@ async def stop_session():
     """Stop the active study session and clean up state."""
     global active_pipeline, active_session
     logger.info("Stopping active session manually.")
+    if active_pipeline:
+        # Save companion emotional state before cleanup
+        try:
+            await active_pipeline.save_companion_state()
+        except Exception:
+            logger.warning("Failed to save companion state on stop.")
+        if active_pipeline.task:
+            try:
+                await active_pipeline.task.queue_frames([EndFrame()])
+            except Exception:
+                logger.warning("Failed to gracefully stop pipeline.")
     active_pipeline = None
     active_session = None
     return {"status": "success"}
 
+@app.post("/congratulate")
+async def congratulate():
+    """Trigger a congratulatory coach interruption when study goals are complete."""
+    global active_pipeline
+    if active_pipeline:
+        logger.info("Session complete: triggering congrats speech.")
+        asyncio.create_task(active_pipeline.trigger_congrats())
+        return {"status": "success"}
+    return {"status": "no_active_session"}
 
-async def _run_bot(room_url: str, token: str, plan: str, persona: str, subject: str, control_laptop: bool):
+
+
+async def _run_bot(room_url: str, token: str, plan: str, persona: str, subject: str, control_laptop: bool, ai_coaching: bool):
     """Run the Study Buddy pipeline as a bot inside a Daily room."""
     global active_pipeline, active_session
-    active_session = Session(plan=plan, persona=persona, subject=subject, control_laptop=control_laptop)
+    active_session = Session(plan=plan, persona=persona, subject=subject, control_laptop=control_laptop, ai_coaching=ai_coaching)
     active_pipeline = StudyBuddyVoicePipeline(active_session, room_url=room_url, token=token)
 
     try:
         logger.info(f"Bot joining room: {room_url}")
         await active_pipeline.start()
+        logger.info("Bot session ended normally.")
+        # Save companion state before cleanup
+        try:
+            await active_pipeline.save_companion_state()
+        except Exception:
+            logger.warning("Failed to save companion state on session end.")
+        active_pipeline = None
+        active_session = None
     except Exception as e:
         logger.error(f"Bot error (Voice coach disabled, running local watchdog mode): {e}")
-        # Keep active_session alive to allow local watchdog and stats tracking
-        return
-    finally:
-        # Only clean up if the pipeline successfully completed its run loop
+        # Save companion state even on error
         if active_pipeline:
-            logger.info("Bot session ended normally.")
-            active_pipeline = None
-            active_session = None
+            try:
+                await active_pipeline.save_companion_state()
+            except Exception:
+                pass
+        # Keep active_session alive to allow local watchdog and stats tracking
+        active_pipeline = None
 
 if __name__ == "__main__":
     import uvicorn
